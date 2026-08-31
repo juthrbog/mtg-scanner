@@ -3,8 +3,9 @@
 {% block content %}
 <h1 class="page-title">Choose a commander</h1>
 <p class="page-note">
-  Search any legendary creature — or anything else that says it can be your
-  commander. Its colour identity sets what the rest of the deck may contain.
+  Only commanders in your collection are listed — decks here are built from
+  cards you actually own. The commander's colour identity sets what the rest
+  of the deck may contain.
 </p>
 
 <form method="get" action="/decks/new" class="commander-search">
@@ -14,7 +15,10 @@
 </form>
 
 {% if q and not commanders %}
-  <div class="collection-grid__empty">Nothing matches “{{ q }}”.</div>
+  <div class="collection-grid__empty">
+    No commander in your collection matches “{{ q }}”.
+    <a href="/scan" class="link link-primary">Scan one in</a> to build with it.
+  </div>
 {% endif %}
 
 {% if commanders %}

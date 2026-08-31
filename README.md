@@ -180,9 +180,13 @@ active and clears all of it in one request.
 
 ## Commander decks
 
-`/decks` builds and saves Commander decks. Pick a commander — any legendary
-creature, or anything whose text says it can be one — and its colour identity
-sets what the rest of the deck may contain.
+`/decks` builds and saves Commander decks **from cards you actually own**.
+Only commanders in the collection are offered, card search returns only owned
+cards, and a deck can never ask for more copies than the collection holds —
+the Add button disappears once every copy is in the deck.
+
+Ownership is counted by *oracle identity*, not by printing: a Sol Ring is a
+Sol Ring whichever set it came from, and Scryfall lists 140 printings of it.
 
 The deck view validates continuously and explains what is wrong rather than
 just refusing:
@@ -195,14 +199,16 @@ just refusing:
   counts mana symbols anywhere on a card, which is why it comes from Scryfall's
   `color_identity` rather than from the mana cost.
 - **Legality** — the Commander banned list, taken from Scryfall.
+- **Availability** — re-checked on every render rather than assumed when a
+  card was added, since a collection changes: trade a card away and the decks
+  built on it say so.
 
 Cards outside the identity or on the banned list can still be added; they are
 flagged in the search results and named in the validation panel. Building a
 deck you know is illegal is a normal step, and a button that silently refuses
 teaches nothing.
 
-Each deck also shows a mana curve over non-lands, cards grouped by type, and
-how many cards you already own versus still need.
+Each deck also shows a mana curve over non-lands and cards grouped by type.
 
 Deck rules live in `app/deck.py` as plain functions over card rows, so they can
 be exercised without a request or a database.

@@ -15,6 +15,10 @@ The format's constraints, and how each is checked here:
   than maintained here.
 * **The commander** must be a legendary creature, or a card that explicitly
   says it can be one.
+* **Availability** — decks are built from cards actually in the collection, so
+  a deck can never ask for more copies than are owned. Ownership is counted by
+  *oracle identity*, not by printing: a Sol Ring is a Sol Ring whichever set it
+  came from, and Scryfall lists 140 printings of it.
 """
 from __future__ import annotations
 
@@ -96,15 +100,21 @@ class DeckReport:
         return DECK_SIZE - self.total
 
 
-def validate(commander, partner, cards: Iterable, owned_ids: Optional[set] = None) -> DeckReport:
+def validate(commander, partner, cards: Iterable,
+             owned_counts: Optional[dict] = None) -> DeckReport:
     """Check a deck against the format.
 
     `cards` are the non-commander rows, each needing name, type_line,
-    oracle_text, color_identity/colors, commander_legal and quantity.
+    oracle_text, color_identity/colors, commander_legal, oracle_id and quantity.
+
+    `owned_counts` maps oracle_id to how many copies the collection holds. A
+    deck built from the collection can drift out of step with it — a card gets
+    traded away, or the same copy is promised to two decks — so availability is
+    re-checked here rather than assumed at the point cards were added.
     """
     cards = list(cards)
     report = DeckReport()
-    owned_ids = owned_ids or set()
+    owned_counts = owned_counts or {}
 
     leaders = [c for c in (commander, partner) if c is not None]
     for leader in leaders:
@@ -123,11 +133,15 @@ def validate(commander, partner, cards: Iterable, owned_ids: Optional[set] = Non
         c["quantity"] for c in cards if "Land" not in (c["type_line"] or "")
     )
 
+    short = []
     for c in cards:
-        if c["scryfall_id"] in owned_ids:
+        have = owned_counts.get(c["oracle_id"], 0)
+        if have >= c["quantity"]:
             report.owned += c["quantity"]
         else:
-            report.missing += c["quantity"]
+            report.owned += have
+            report.missing += c["quantity"] - have
+            short.append(f"{c['name']} (need {c['quantity']}, own {have})")
 
     if report.total != DECK_SIZE:
         over = report.total > DECK_SIZE
@@ -163,6 +177,13 @@ def validate(commander, partner, cards: Iterable, owned_ids: Optional[set] = Non
     if banned:
         report.problems.append(Problem(
             "legality", "Not legal in Commander.", banned,
+        ))
+
+    if short:
+        report.problems.append(Problem(
+            "availability",
+            "More copies than your collection holds.",
+            sorted(short),
         ))
 
     return report

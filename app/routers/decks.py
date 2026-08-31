@@ -17,7 +17,7 @@ router = APIRouter()
 
 # Everything the rules engine and the templates need about a card.
 CARD_FIELDS = """
-    sc.id AS scryfall_id, sc.name, sc.type_line, sc.oracle_text, sc.mana_cost,
+    sc.id AS scryfall_id, sc.oracle_id, sc.name, sc.type_line, sc.oracle_text, sc.mana_cost,
     sc.color_identity, sc.colors, sc.commander_legal, sc.cmc, sc.rarity,
     sc.set_code, sc.set_name, sc.image_small, sc.image_normal,
     sc.price_usd, sc.manapool_nm_cents, sc.manapool_cents
@@ -67,8 +67,31 @@ def _deck_cards(conn: sqlite3.Connection, deck_id: int) -> List[sqlite3.Row]:
     ).fetchall()
 
 
-def _owned_ids(conn: sqlite3.Connection) -> set:
-    return {r["scryfall_id"] for r in conn.execute("SELECT scryfall_id FROM collection_entry")}
+def _owned_counts(conn: sqlite3.Connection) -> dict:
+    """How many copies of each card the collection holds, keyed by oracle id.
+
+    Keyed by oracle rather than printing because a Sol Ring is a Sol Ring
+    whichever set it came from — Scryfall lists 140 printings — and a deck
+    cares about the card, not the art.
+    """
+    return {
+        r["oracle_id"]: r["qty"]
+        for r in conn.execute(
+            """SELECT sc.oracle_id, SUM(ce.quantity) AS qty
+               FROM collection_entry ce JOIN scryfall_card sc ON sc.id = ce.scryfall_id
+               GROUP BY sc.oracle_id"""
+        )
+    }
+
+
+# Only cards the collection actually holds are offered. Decks here are for
+# building out of the shoebox, not wishlists, so a card you don't own should
+# never be a click away from ending up in a list you think you can sleeve.
+OWNED_ONLY = """
+    EXISTS (SELECT 1 FROM collection_entry ce
+            JOIN scryfall_card own ON own.id = ce.scryfall_id
+            WHERE own.oracle_id = sc.oracle_id)
+"""
 
 
 def _touch(conn: sqlite3.Connection, deck_id: int) -> None:
@@ -80,8 +103,8 @@ def _deck_context(conn: sqlite3.Connection, deck_id: int) -> dict:
     commander = _card(conn, deck["commander_id"]) if deck["commander_id"] else None
     partner = _card(conn, deck["partner_id"]) if deck["partner_id"] else None
     cards = _deck_cards(conn, deck_id)
-    owned = _owned_ids(conn)
-    report = validate(commander, partner, cards, owned_ids=owned)
+    owned = _owned_counts(conn)
+    report = validate(commander, partner, cards, owned_counts=owned)
     return {
         "deck": deck,
         "commander": commander,
@@ -89,7 +112,7 @@ def _deck_context(conn: sqlite3.Connection, deck_id: int) -> dict:
         "groups": categorise(cards),
         "curve": curve(cards),
         "report": report,
-        "owned_ids": owned,
+        "owned_counts": owned,
         "deck_size": DECK_SIZE,
     }
 
@@ -139,6 +162,7 @@ def _commander_search(conn: sqlite3.Connection, q: str, limit: int = 24) -> List
     where = [
         "sc.commander_legal = 1",
         "sc.image_small IS NOT NULL",
+        OWNED_ONLY,
         "((sc.type_line LIKE '%Legendary%' AND sc.type_line LIKE '%Creature%')"
         " OR sc.oracle_text LIKE '%can be your commander%')",
     ]
@@ -188,7 +212,7 @@ def card_search(request: Request, deck_id: int, q: str = "", conn=Depends(get_db
     results = []
     if q and q.strip():
         parsed = parse(q)
-        where = ["sc.image_small IS NOT NULL"]
+        where = ["sc.image_small IS NOT NULL", OWNED_ONLY]
         params: list = []
         if parsed.sql:
             where.append(f"({parsed.sql})")
@@ -201,17 +225,22 @@ def card_search(request: Request, deck_id: int, q: str = "", conn=Depends(get_db
                 ORDER BY {order} LIMIT 30""",
             [*params, *order_params],
         ).fetchall()
-        in_deck = {r["scryfall_id"] for r in _deck_cards(conn, deck_id)}
-        owned = _owned_ids(conn)
+        in_deck = {r["oracle_id"]: r["quantity"] for r in _deck_cards(conn, deck_id)}
+        owned = _owned_counts(conn)
         for r in rows:
+            have = owned.get(r["oracle_id"], 0)
+            used = in_deck.get(r["oracle_id"], 0)
             results.append({
                 "card": r,
                 # Flagged rather than hidden: a card outside the identity is
                 # still worth showing, so the reason it can't go in is visible.
                 "off_identity": bool(commander) and not identity_of(r) <= identity,
                 "banned": r["commander_legal"] == 0,
-                "in_deck": r["scryfall_id"] in in_deck,
-                "owned": r["scryfall_id"] in owned,
+                "owned": have,
+                "used": used,
+                # Every copy already in the deck; adding another would ask for
+                # a card that isn't there.
+                "exhausted": used >= have,
             })
     return templates.TemplateResponse(
         request, "partials/deck_search.html",
@@ -222,11 +251,24 @@ def card_search(request: Request, deck_id: int, q: str = "", conn=Depends(get_db
 @router.post("/{deck_id}/cards", response_class=HTMLResponse)
 def add_card(request: Request, deck_id: int, scryfall_id: str = Form(...), conn=Depends(get_db)):
     _deck_row(conn, deck_id)
-    conn.execute(
-        """INSERT INTO deck_card (deck_id, scryfall_id, quantity) VALUES (?, ?, 1)
-           ON CONFLICT(deck_id, scryfall_id) DO UPDATE SET quantity = quantity + 1""",
-        (deck_id, scryfall_id),
+    card = _card(conn, scryfall_id)
+    if card is None:
+        raise HTTPException(status_code=400, detail="Unknown card")
+
+    # Cap at what the collection holds. The button is hidden once a card is
+    # used up, but a stale search panel could still post — the limit belongs
+    # here, where it cannot be raced.
+    have = _owned_counts(conn).get(card["oracle_id"], 0)
+    used = sum(
+        r["quantity"] for r in _deck_cards(conn, deck_id)
+        if r["oracle_id"] == card["oracle_id"]
     )
+    if used < have:
+        conn.execute(
+            """INSERT INTO deck_card (deck_id, scryfall_id, quantity) VALUES (?, ?, 1)
+               ON CONFLICT(deck_id, scryfall_id) DO UPDATE SET quantity = quantity + 1""",
+            (deck_id, scryfall_id),
+        )
     _touch(conn, deck_id)
     return _deck_body(request, conn, deck_id)
 

@@ -8,9 +8,9 @@
       {% elif report.remaining < 0 %}{{ -report.remaining }} too many
       {% else %}complete{% endif %}
     </span>
-    {% if report.total > 1 %}
-    <span class="deck-status__owned" title="Cards in this deck you already own">
-      {{ report.owned }} owned · {{ report.missing }} missing
+    {% if report.missing %}
+    <span class="deck-status__owned" title="Copies this deck asks for that your collection doesn't hold">
+      {{ report.missing }} more {{ 'copy' if report.missing == 1 else 'copies' }} than you own
     </span>
     {% endif %}
   </div>
@@ -57,14 +57,15 @@
   <h3 class="deck-group__title">{{ group.name }} <span>{{ group.count }}</span></h3>
   <ul class="deck-list">
     {% for c in group.cards %}
-    <li class="deck-row {% if c.scryfall_id not in owned_ids %}deck-row--missing{% endif %}">
+    {% set have = owned_counts.get(c.oracle_id, 0) %}
+    <li class="deck-row {% if c.quantity > have %}deck-row--missing{% endif %}">
       <span class="deck-row__qty">{{ c.quantity }}×</span>
       <img class="deck-row__thumb" src="{{ c.image_small }}" alt=""
            data-preview-src="{{ c.image_normal }}" loading="lazy">
       <span class="deck-row__name">{{ c.name }}</span>
       <span class="deck-row__cost">{{ c.mana_cost|mana }}</span>
-      {% if c.scryfall_id not in owned_ids %}
-      <span class="deck-row__flag" title="Not in your collection">need</span>
+      {% if c.quantity > have %}
+      <span class="deck-row__flag" title="Your collection holds {{ have }}">only {{ have }} owned</span>
       {% endif %}
       <button class="deck-row__remove" title="Remove from deck"
               hx-delete="/decks/{{ deck.id }}/cards/{{ c.entry_id }}"

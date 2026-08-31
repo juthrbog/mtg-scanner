@@ -18,15 +18,20 @@
     {% endif %}
   </div>
   <div class="deck-hit__actions">
-    {% if r.owned %}<span class="deck-hit__owned" title="In your collection">owned</span>{% endif %}
-    {% if r.in_deck %}<span class="deck-hit__in">in deck</span>{% endif %}
-    {# Blocked cards can still be added: the deck stays editable and the
-       validation panel explains what is wrong, rather than the button
-       silently refusing. #}
+    <span class="deck-hit__owned" title="Copies in your collection, and how many this deck already uses">
+      {{ r.used }}/{{ r.owned }}
+    </span>
+    {# Rule-breaking cards can still be added — the validation panel explains
+       what is wrong. Running out of copies is different: there is no physical
+       card left to sleeve, so the button goes away entirely. #}
+    {% if r.exhausted %}
+      <span class="deck-hit__in">all in deck</span>
+    {% else %}
     <form hx-post="/decks/{{ deck_id }}/cards" hx-target="#deck-body">
       <input type="hidden" name="scryfall_id" value="{{ r.card.scryfall_id }}">
       <button class="btn btn-primary btn-xs">Add</button>
     </form>
+    {% endif %}
   </div>
 </div>
 {% endfor %}
