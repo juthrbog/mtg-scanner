@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Decks · Weatherlight{% endblock %}
+{% block content %}
+<div class="deck-header">
+  <h1 class="page-title">Commander decks</h1>
+  <a href="/decks/new" class="btn btn-primary btn-sm">New deck</a>
+</div>
+
+{% if not decks %}
+  <div class="collection-grid__empty">
+    No decks yet. <a href="/decks/new" class="link link-primary">Pick a commander</a> to start one.
+  </div>
+{% else %}
+<div class="deck-grid">
+  {% for d in decks %}
+  <a class="deck-card" href="/decks/{{ d.id }}">
+    {% if d.image_normal %}
+    <img class="deck-card__art" src="{{ d.image_small }}" alt="" loading="lazy"
+         data-preview-src="{{ d.image_normal }}">
+    {% endif %}
+    <div class="deck-card__body">
+      <h2 class="deck-card__name">{{ d.name }}</h2>
+      <p class="deck-card__commander">{{ d.commander_name or "No commander" }}</p>
+      <div class="deck-card__meta">
+        <span class="badge badge-sm {% if d.total == deck_size %}badge-success{% else %}badge-ghost{% endif %}">
+          {{ d.total }}/{{ deck_size }}
+        </span>
+        {% if d.remaining > 0 %}
+        <span class="deck-card__need">{{ d.remaining }} to go</span>
+        {% elif d.remaining < 0 %}
+        <span class="deck-card__need">{{ -d.remaining }} over</span>
+        {% endif %}
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

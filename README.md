@@ -178,6 +178,37 @@ active and clears all of it in one request.
 
 ---
 
+## Commander decks
+
+`/decks` builds and saves Commander decks. Pick a commander — any legendary
+creature, or anything whose text says it can be one — and its colour identity
+sets what the rest of the deck may contain.
+
+The deck view validates continuously and explains what is wrong rather than
+just refusing:
+
+- **100 cards**, counting the commander.
+- **Singleton**, except basic lands and cards whose own text allows any number.
+  That exemption is read from the card's rules text, so something like
+  Persistent Petitioners is handled without a hard-coded list.
+- **Colour identity** — every card must fit inside the commander's. Identity
+  counts mana symbols anywhere on a card, which is why it comes from Scryfall's
+  `color_identity` rather than from the mana cost.
+- **Legality** — the Commander banned list, taken from Scryfall.
+
+Cards outside the identity or on the banned list can still be added; they are
+flagged in the search results and named in the validation panel. Building a
+deck you know is illegal is a normal step, and a button that silently refuses
+teaches nothing.
+
+Each deck also shows a mana curve over non-lands, cards grouped by type, and
+how many cards you already own versus still need.
+
+Deck rules live in `app/deck.py` as plain functions over card rows, so they can
+be exercised without a request or a database.
+
+---
+
 ## Stats
 
 `/stats` summarises the collection: total cards, unique printings, distinct

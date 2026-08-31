@@ -679,3 +679,125 @@ a.price-chip:hover {
 /* Hidden until something is actually filtered, so the toolbar stays quiet in
    the default state. */
 .reset-filters[hidden] { display: none; }
+
+/* ---- Decks ---- */
+.page-title { font-size: 1.35rem; font-weight: 700; margin: 0; }
+.page-note { font-size: 0.85rem; opacity: 0.7; max-width: 62ch; margin: 0.35rem 0 1rem; }
+
+.deck-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;
+}
+.deck-title { display: flex; flex-direction: column; gap: 0.15rem; }
+.deck-back { font-size: 0.78rem; opacity: 0.6; text-decoration: none; }
+.deck-back:hover { opacity: 1; }
+
+.deck-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 1rem; }
+.deck-card {
+  display: flex; gap: 0.75rem; padding: 0.75rem;
+  border: 1px solid rgba(128,128,128,0.25); border-radius: 0.75rem;
+  background: rgba(128,128,128,0.05); text-decoration: none; color: inherit;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+.deck-card:hover { border-color: rgba(128,128,128,0.6); background: rgba(128,128,128,0.1); }
+.deck-card__art { width: 3.6rem; border-radius: 0.35rem; flex: none; align-self: flex-start; }
+.deck-card__body { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+.deck-card__name { font-size: 0.95rem; font-weight: 600; margin: 0; }
+.deck-card__commander { font-size: 0.78rem; opacity: 0.65; margin: 0; }
+.deck-card__meta { display: flex; align-items: center; gap: 0.45rem; margin-top: 0.2rem; }
+.deck-card__need { font-size: 0.72rem; opacity: 0.55; }
+
+.commander-search { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1rem; }
+.commander-option {
+  display: flex; flex-direction: column; gap: 0.4rem; padding: 0.6rem;
+  border: 1px solid rgba(128,128,128,0.2); border-radius: 0.6rem;
+}
+.commander-option__body { display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start; }
+.commander-option__name { font-size: 0.82rem; font-weight: 600; line-height: 1.2; }
+.commander-option__id .ms { font-size: 0.9rem; }
+
+/* Deck detail */
+.deck-layout { display: grid; grid-template-columns: minmax(0,1fr) 15rem; gap: 1.5rem; align-items: start; }
+@media (max-width: 860px) { .deck-layout { grid-template-columns: minmax(0,1fr); } .deck-side { order: -1; } }
+.deck-side__art { width: 100%; border-radius: 0.75rem; display: block; }
+.deck-side__commander { font-size: 0.85rem; font-weight: 600; margin: 0.5rem 0 0.15rem; }
+.deck-side__identity .ms { font-size: 1rem; margin-right: 0.1rem; }
+
+.deck-add { margin-bottom: 1.25rem; }
+.deck-search { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.6rem; max-height: 22rem; overflow-y: auto; }
+.deck-search__empty { font-size: 0.8rem; opacity: 0.6; }
+.deck-hit {
+  display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.55rem;
+  border: 1px solid rgba(128,128,128,0.2); border-radius: 0.5rem;
+}
+.deck-hit--blocked { border-color: rgba(234,179,8,0.5); }
+.deck-hit__thumb { width: 2.1rem; border-radius: 0.2rem; flex: none; }
+.deck-hit__body { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; flex: 1; }
+.deck-hit__name { font-size: 0.84rem; font-weight: 600; }
+.deck-hit__meta { font-size: 0.72rem; opacity: 0.7; display: flex; align-items: center; gap: 0.35rem; }
+.deck-hit__type { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.deck-hit__why { font-size: 0.7rem; color: #eab308; }
+.deck-hit__actions { display: flex; align-items: center; gap: 0.4rem; flex: none; }
+.deck-hit__owned, .deck-hit__in { font-size: 0.68rem; opacity: 0.6; white-space: nowrap; }
+
+/* Validation panel */
+.deck-status {
+  border: 1px solid rgba(128,128,128,0.25); border-left: 3px solid #eab308;
+  border-radius: 0.5rem; padding: 0.75rem 0.9rem; margin-bottom: 1rem;
+}
+.deck-status--legal { border-left-color: #22c55e; }
+.deck-status__counts { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
+.deck-status__total { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.deck-status__of { font-size: 0.9rem; opacity: 0.5; font-weight: 400; }
+.deck-status__label { font-size: 0.8rem; opacity: 0.7; }
+.deck-status__owned { font-size: 0.75rem; opacity: 0.55; margin-left: auto; }
+.deck-status__ok { color: #22c55e; font-size: 0.85rem; margin: 0.4rem 0 0; }
+.deck-problems { list-style: none; margin: 0.5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.deck-problem { font-size: 0.8rem; display: flex; flex-direction: column; }
+.deck-problem__cards { font-size: 0.75rem; opacity: 0.6; }
+
+/* Curve */
+.deck-curve { margin-bottom: 1.25rem; }
+.deck-curve__title { font-size: 0.78rem; opacity: 0.7; display: block; margin-bottom: 0.4rem; }
+.deck-curve__note { opacity: 0.5; font-size: 0.72rem; }
+.deck-curve__bars { display: flex; align-items: flex-end; gap: 0.35rem; height: 4.5rem; }
+.deck-curve__col { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; gap: 0.15rem; }
+
+/* The bar needs a track with a definite height to size against. Without one,
+   a percentage height has nothing to resolve against inside a flex column and
+   every bar renders the same. */
+.deck-curve__track { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+
+/* One hue: the bar encodes how many cards, and the number beneath says which
+   mana value — colour would be encoding nothing extra. */
+.deck-curve__bar { width: 100%; background: #4F6BD8; border-radius: 3px 3px 0 0; height: var(--h, 0%); }
+
+/* A count of zero draws nothing; a minimum height would read as "a few". */
+.deck-curve__bar[style*="--h: 0%"] { display: none; }
+.deck-curve__count { font-size: 0.65rem; opacity: 0.6; font-variant-numeric: tabular-nums; }
+.deck-curve__mv { font-size: 0.7rem; opacity: 0.5; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .deck-curve__bar { background: #7C93EC; } }
+:root[data-theme="dark"] .deck-curve__bar { background: #7C93EC; }
+
+/* Card list */
+.deck-group { margin-bottom: 1.1rem; }
+.deck-group__title { font-size: 0.8rem; font-weight: 600; opacity: 0.75; margin: 0 0 0.35rem; }
+.deck-group__title span { opacity: 0.5; font-weight: 400; margin-left: 0.3rem; }
+.deck-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.deck-row {
+  display: flex; align-items: center; gap: 0.55rem; padding: 0.28rem 0.35rem;
+  border-radius: 0.35rem; font-size: 0.85rem;
+}
+.deck-row:hover { background: rgba(128,128,128,0.1); }
+.deck-row__qty { font-variant-numeric: tabular-nums; opacity: 0.6; font-size: 0.78rem; min-width: 1.6rem; }
+.deck-row__thumb { width: 1.6rem; border-radius: 0.15rem; flex: none; }
+.deck-row__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deck-row__cost { font-size: 0.62rem; white-space: nowrap; flex: none; }
+.deck-row__flag { font-size: 0.65rem; color: #eab308; opacity: 0.9; flex: none; }
+.deck-row--missing .deck-row__name { opacity: 0.7; }
+.deck-row__remove {
+  border: 0; background: transparent; color: inherit; opacity: 0; cursor: pointer;
+  font-size: 1rem; line-height: 1; padding: 0 0.25rem; flex: none;
+}
+.deck-row:hover .deck-row__remove, .deck-row__remove:focus-visible { opacity: 0.6; }
+.deck-row__remove:hover { opacity: 1; color: #ef4444; }

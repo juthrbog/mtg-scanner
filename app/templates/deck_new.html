@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}New deck · Weatherlight{% endblock %}
+{% block content %}
+<h1 class="page-title">Choose a commander</h1>
+<p class="page-note">
+  Search any legendary creature — or anything else that says it can be your
+  commander. Its colour identity sets what the rest of the deck may contain.
+</p>
+
+<form method="get" action="/decks/new" class="commander-search">
+  <input type="search" name="q" value="{{ q }}" autofocus autocomplete="off"
+         placeholder="Atraxa, Krenko, t:dragon…" class="input input-bordered w-full max-w-sm">
+  <button class="btn btn-primary btn-sm">Search</button>
+</form>
+
+{% if q and not commanders %}
+  <div class="collection-grid__empty">Nothing matches “{{ q }}”.</div>
+{% endif %}
+
+{% if commanders %}
+<div class="collection-grid">
+  {% for c in commanders %}
+  <form method="post" action="/decks/" class="commander-option">
+    <input type="hidden" name="commander_id" value="{{ c.scryfall_id }}">
+    <input type="hidden" name="name" value="{{ c.name }}">
+    <img src="{{ c.image_small }}" alt="{{ c.name }}" loading="lazy"
+         data-preview-src="{{ c.image_normal }}" class="rounded-lg">
+    <div class="commander-option__body">
+      <span class="commander-option__name">{{ c.name }}</span>
+      <span class="commander-option__id">
+        {% for letter in c.color_identity.split(',') if letter %}
+        <i class="ms ms-{{ letter|lower }} ms-cost"></i>
+        {% endfor %}
+        {% if not c.color_identity %}<span class="text-xs opacity-60">colourless</span>{% endif %}
+      </span>
+      <button class="btn btn-primary btn-xs">Build deck</button>
+    </div>
+  </form>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

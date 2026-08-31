@@ -40,6 +40,28 @@ CREATE TABLE IF NOT EXISTS collection_entry (
 );
 CREATE INDEX IF NOT EXISTS idx_collection_scryfall_id ON collection_entry(scryfall_id);
 
+CREATE TABLE IF NOT EXISTS deck (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    name          TEXT NOT NULL,
+    -- The commander itself is stored here rather than as a deck_card row, so
+    -- "the deck's colour identity" has exactly one source and the commander
+    -- can never be removed by ordinary card editing.
+    commander_id  TEXT REFERENCES scryfall_card(id),
+    partner_id    TEXT REFERENCES scryfall_card(id),
+    notes         TEXT,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS deck_card (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    deck_id       INTEGER NOT NULL REFERENCES deck(id) ON DELETE CASCADE,
+    scryfall_id   TEXT NOT NULL REFERENCES scryfall_card(id),
+    quantity      INTEGER NOT NULL DEFAULT 1,
+    UNIQUE(deck_id, scryfall_id)
+);
+CREATE INDEX IF NOT EXISTS idx_deck_card_deck ON deck_card(deck_id);
+
 CREATE TABLE IF NOT EXISTS scan_event (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     captured_at   TEXT NOT NULL DEFAULT (datetime('now')),
@@ -95,6 +117,11 @@ _MIGRATIONS = {
         # comma-joined. Searching this beats matching oracle text, which
         # would also hit the word in flavour text or a reminder note.
         "keywords": "TEXT",
+        # Mana value, for deck curves.
+        "cmc": "REAL",
+        # Commander legality straight from Scryfall, so the banned list stays
+        # correct without maintaining one by hand.
+        "commander_legal": "INTEGER",
     },
 }
 

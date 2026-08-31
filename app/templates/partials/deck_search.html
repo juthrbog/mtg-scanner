@@ -1,0 +1,32 @@
+{% if q and not results %}
+  <p class="deck-search__empty">Nothing matches “{{ q }}”.</p>
+{% endif %}
+{% for r in results %}
+<div class="deck-hit {% if r.off_identity or r.banned %}deck-hit--blocked{% endif %}">
+  <img class="deck-hit__thumb" src="{{ r.card.image_small }}" alt=""
+       data-preview-src="{{ r.card.image_normal }}" loading="lazy">
+  <div class="deck-hit__body">
+    <span class="deck-hit__name">{{ r.card.name }}</span>
+    <span class="deck-hit__meta">
+      {{ r.card.mana_cost|mana }}
+      <span class="deck-hit__type">{{ r.card.type_line }}</span>
+    </span>
+    {% if r.banned %}
+      <span class="deck-hit__why">Banned in Commander</span>
+    {% elif r.off_identity %}
+      <span class="deck-hit__why">Outside your commander's colour identity</span>
+    {% endif %}
+  </div>
+  <div class="deck-hit__actions">
+    {% if r.owned %}<span class="deck-hit__owned" title="In your collection">owned</span>{% endif %}
+    {% if r.in_deck %}<span class="deck-hit__in">in deck</span>{% endif %}
+    {# Blocked cards can still be added: the deck stays editable and the
+       validation panel explains what is wrong, rather than the button
+       silently refusing. #}
+    <form hx-post="/decks/{{ deck_id }}/cards" hx-target="#deck-body">
+      <input type="hidden" name="scryfall_id" value="{{ r.card.scryfall_id }}">
+      <button class="btn btn-primary btn-xs">Add</button>
+    </form>
+  </div>
+</div>
+{% endfor %}

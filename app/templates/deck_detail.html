@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ deck.name }} · Weatherlight{% endblock %}
+{% block content %}
+<div class="deck-header">
+  <div class="deck-title">
+    <a href="/decks/" class="deck-back">← Decks</a>
+    <h1 class="page-title">{{ deck.name }}</h1>
+  </div>
+  <button class="btn btn-error btn-outline btn-sm"
+          hx-delete="/decks/{{ deck.id }}"
+          hx-confirm="Delete “{{ deck.name }}”? This can't be undone.">
+    Delete deck
+  </button>
+</div>
+
+<div class="deck-layout">
+  <div class="deck-main">
+    <div class="deck-add">
+      <input type="search" name="q" autocomplete="off" spellcheck="false"
+             placeholder="Add a card — name, t:type, kw:keyword…"
+             class="input input-bordered w-full max-w-sm"
+             hx-get="/decks/{{ deck.id }}/search" hx-trigger="input delay:300ms, search"
+             hx-target="#deck-search">
+      <div id="deck-search" class="deck-search"></div>
+    </div>
+
+    <div id="deck-body">
+      {% include "partials/deck_body.html" %}
+    </div>
+  </div>
+
+  <aside class="deck-side">
+    {% if commander %}
+    <img class="deck-side__art" src="{{ commander.image_normal }}" alt="{{ commander.name }}"
+         data-preview-src="{{ commander.image_normal }}">
+    <p class="deck-side__commander">{{ commander.name }}</p>
+    <p class="deck-side__identity">
+      {% if report.identity %}
+        {% for letter in 'WUBRG' if letter in report.identity %}
+        <i class="ms ms-{{ letter|lower }} ms-cost"></i>
+        {% endfor %}
+      {% else %}
+        <span class="text-xs opacity-60">Colourless identity</span>
+      {% endif %}
+    </p>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

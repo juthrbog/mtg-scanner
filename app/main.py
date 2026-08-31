@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import SCAN_CACHE_DIR
 from .db import init_db
 from .recognition.match import art_index, index
-from .routers import collection, scan, stats
+from .routers import collection, decks, scan, stats
 
 app = FastAPI(title="Weatherlight")
 
@@ -20,6 +20,7 @@ app.mount("/data/scans", StaticFiles(directory=str(SCAN_CACHE_DIR)), name="scans
 app.include_router(collection.router, prefix="/collection", tags=["collection"])
 app.include_router(scan.router, prefix="/scan", tags=["scan"])
 app.include_router(stats.router, prefix="/stats", tags=["stats"])
+app.include_router(decks.router, prefix="/decks", tags=["decks"])
 
 
 @app.on_event("startup")
