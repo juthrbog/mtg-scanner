@@ -1,0 +1,16 @@
+services:
+  app:
+    build: .
+    # Bound to localhost on purpose. Browsers only expose a camera in a secure
+    # context, and 127.0.0.1 counts as one — publishing on 0.0.0.0 would make
+    # the app reachable from the LAN at an address where scanning cannot work.
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # The database, art cache and bulk downloads. Kept in a named volume so
+      # rebuilding the image never costs the index or the collection.
+      - mtg-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  mtg-data:

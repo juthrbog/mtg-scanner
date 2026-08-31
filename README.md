@@ -1,183 +1,174 @@
 # MTG Scanner
 
-A local app for scanning and cataloging a Magic: The Gathering collection.
-Point a webcam at a card, confirm the match, and it's in your collection —
-searchable and browsable from the same page. No cloud service, no account,
-one SQLite file on your own disk.
+A local app for cataloguing a Magic: The Gathering collection. Point a webcam
+at a card, confirm the match, and it's in your collection — searchable,
+sortable, and browsable from the same page. No cloud service, no account, one
+SQLite file on your own disk.
 
-Stack: **FastAPI + HTMX + Tailwind/DaisyUI + SQLite**, card data from
-**[Scryfall](https://scryfall.com/docs/api)**, recognition via OpenCV card
-detection + perceptual hashing, set symbols from
-**[Keyrune](https://keyrune.andrewgioia.com/)**.
+**FastAPI + HTMX + Tailwind/DaisyUI + SQLite.** Card data from
+[Scryfall](https://scryfall.com/docs/api), recognition via OpenCV card
+detection and perceptual hashing, set symbols from
+[Keyrune](https://keyrune.andrewgioia.com/), mana symbols from
+[Mana](https://mana.andrewgioia.com/).
 
-No Node required. Tailwind is compiled by its standalone binary, and every
-front-end asset is served from `app/static/` — the app styles correctly
-offline and can't be broken by a slow or unreachable CDN.
+No Node and no runtime CDN: Tailwind is compiled by its standalone binary and
+every front-end asset is served from `app/static/`, so the app renders
+correctly offline and can't be broken by a slow or blocked CDN.
 
-## Setup
+---
+
+## Quick start with Docker
+
+```bash
+docker compose up --build          # builds, then serves on http://localhost:8000
+```
+
+The first run needs card data. In another terminal:
+
+```bash
+docker compose exec app python -m app.scryfall.sync --bulk-type default_cards
+docker compose exec app python -m app.scryfall.hashing --workers 16
+docker compose exec app python -m app.scryfall.prices        # optional, market prices
+```
+
+Everything it downloads — the database, card art cache and bulk files — lives
+in the `mtg-data` volume, so rebuilding the image never costs you the index or
+your collection. (Verified: a `--no-cache` rebuild leaves the index, the hashes
+and the collection intact.)
+
+The image is ~660MB, most of it OpenCV, ONNX Runtime and the OCR models. To
+drop roughly half, remove `rapidocr-onnxruntime` from `requirements.txt` — the
+scan page's **Name check** toggle then simply does nothing.
+
+**Camera access needs a secure context.** `http://localhost:8000` counts as
+one, so scanning works out of the box on the machine running Docker. Reaching
+it from another device on your LAN does not — see [Scanning from another
+device](#scanning-from-another-device).
+
+## Running without Docker
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-./fetch-assets.sh              # Tailwind CLI + DaisyUI/Keyrune/htmx (once)
-./build-css.sh                 # compile app/static/tailwind.css
+./fetch-assets.sh                  # Tailwind CLI, DaisyUI, Keyrune, Mana, htmx, OpenCV.js
+./build-css.sh                     # compile app/static/tailwind.css
 ```
 
-### Styling
-
-The front end uses Tailwind, compiled by Tailwind's **standalone CLI** — a
-single binary, no Node or npm. `fetch-assets.sh` downloads it to `bin/`.
-
-After editing anything in `app/templates/`, recompile:
+Then load card data — two steps on purpose, since the first is quick and you
+don't need the second to start browsing:
 
 ```bash
-./build-css.sh                 # or: ./build-css.sh --watch
-```
-
-Two notes on why it's set up this way:
-
-- **Not the Play CDN.** `cdn.tailwindcss.com` ships a compiler that generates
-  styles in the browser at load time. It's documented as development-only,
-  and when it loads slowly or is blocked, every utility disappears at once —
-  grids stop being grids and the page collapses into full-size stacked
-  elements. The standalone CLI scans template *files* and emits a static
-  stylesheet, so this can't happen. It also means utilities used only inside
-  HTMX-injected partials compile correctly, which the DOM-scanning CDN did
-  not do reliably.
-- **`app/static/app.css`** holds hand-written CSS for page structure and the
-  card-art hover preview. Component looks still come from DaisyUI.
-- **The filter dropdowns use `appearance: base-select`.** A native `<select>`
-  picker is drawn by the OS, so CSS on the element cannot touch the open menu
-  — it renders as stock system chrome against the app's own theme. Opting into
-  `base-select` makes the picker styleable while the element stays a real
-  `<select>`, so keyboard navigation, form semantics and mobile behaviour are
-  unchanged. Browsers without support ignore the rules and show their native
-  picker.
-
-## First run
-
-Card recognition needs a local copy of Scryfall's card data. This is two
-separate steps on purpose — the first is fast, the second is slow, and you
-don't need to wait for the slow one to start browsing.
-
-**1. Sync card metadata** (a minute or two):
-
-```bash
-python -m app.scryfall.sync --bulk-type unique_artwork --limit 500   # quick smoke test
-```
-
-Once you've confirmed things work, do the real sync (every printing, so
-foils/sets/collector numbers are all distinguishable — this downloads a
-few hundred MB from Scryfall):
-
-```bash
+# 1. Card metadata. Every printing, so foils, sets and collector numbers are
+#    all distinguishable. A few hundred MB from Scryfall.
 python -m app.scryfall.sync --bulk-type default_cards
-```
 
-**2. Build the image match index.** One image fetched per card; roughly
-3 minutes for a full `default_cards` sync at 16 workers. Safe to interrupt
-and re-run — it resumes where it left off, and art is cached under
-`data/art_cache/` so later re-hashes cost CPU rather than another download:
-
-```bash
+# 2. The image match index. One small image per card; about 3 minutes at 16
+#    workers. Safe to interrupt and re-run — it resumes, and art is cached
+#    under data/art_cache/ so later re-hashes cost CPU, not another download.
 python -m app.scryfall.hashing --workers 16
-```
 
-Cards hashed at a different fingerprint size are picked up automatically and
-recomputed; `--rehash` forces every card to be redone.
-
-**3. Run the app:**
-
-```bash
-uvicorn app.main:app --reload
-```
-
-Open **http://localhost:8000**. Camera access works out of the box on
-`localhost` — browsers treat it as a secure context. If you want to scan
-from a phone over your LAN instead, you'll need to serve over HTTPS or use
-your browser's flag for trusting an insecure origin on your local network.
-
-## How it's organized
-
-```
-app/
-  main.py              FastAPI app, startup (loads the hash index into memory)
-  config.py            paths and recognition tuning, one place to edit
-  db.py                SQLite schema + connection helpers
-  scryfall/
-    sync.py            bulk metadata download → scryfall_card table
-    hashing.py         downloads art, computes pHash → fills scryfall_card.phash
-    prices.py          refreshes Mana Pool prices (TCGplayer arrives with sync.py)
-    keyrune.py         which set codes have a Keyrune symbol (--refresh to update)
-  mana.py              renders Scryfall {R} tokens as Mana font symbols
-  recognition/
-    detect.py           OpenCV: find the card in a frame, warp it flat
-    match.py             pHash comparison against the in-memory index
-  static/detect-live.js  the same detection running live in the browser,
-                         drawing the outline over the camera preview
-  routers/
-    collection.py       browse / search / edit / delete
-    scan.py               capture → match → confirm
-    stats.py              collection totals, value, breakdown by colour
-  templates/            Jinja2 + HTMX; Tailwind and DaisyUI loaded from CDN, no build step
-  static/scan.js         the one hand-written bit of client JS (camera capture)
-data/                    gitignored — mtg.db, downloaded bulk files, scan captures
-```
-
-## Prices
-
-Each card shows market prices from two marketplaces, linked to that card's
-page on each:
-
-- **TCGplayer** — arrives with the Scryfall sync; Scryfall's `usd`/`usd_foil`
-  fields *are* TCGplayer market prices, so no extra source is needed. The
-  outbound link is Scryfall's own affiliate URL, exactly as its API supplies it.
-- **[Mana Pool](https://manapool.com)** — its `/api/v1/prices/singles`
-  endpoint is public and unauthenticated, and returns every single's price
-  keyed by Scryfall ID. Refresh with:
-
-```bash
+# 3. Market prices (optional).
 python -m app.scryfall.prices
 ```
 
-Prices move constantly, so re-run that whenever you want current numbers.
-Roughly 84k of the 111k cards carry a Mana Pool price; cards with none simply
-show the TCGplayer chip (or "No market price available" if neither has one).
+Run it:
 
-## Searching the collection
+```bash
+uvicorn app.main:app --reload      # http://localhost:8000
+```
+
+To try things quickly without the full download, `sync` takes
+`--bulk-type unique_artwork --limit 500`.
+
+---
+
+## Scanning
+
+The browser uploads the **whole camera frame** and the server locates the card
+within it, so a card doesn't have to be centred or square to the lens.
+`detect-live.js` runs the same detection live and draws the outline over the
+preview, turning green once it has held steady — and that outline is what the
+server works from, because both run the same algorithm with the same
+constants.
+
+> If you change a threshold in `detect.py`, change it in `detect-live.js` too,
+> or the preview will start lying about what the server sees.
+
+Three toggles on the scan page, each remembered between visits:
+
+- **Auto-capture** fires the shutter once a card has been held still for about
+  0.85s. It disarms after firing and re-arms only when the card leaves the
+  view, so swapping in the next card drives the rhythm rather than a timer.
+  Taking the card away also dismisses an already-confirmed result — but never
+  pending candidates you haven't acted on. It only captures; confirming stays
+  manual, because auto-adding a wrong card is worse than one extra click.
+
+- **Art matching** compares the illustration window on its own as well as the
+  whole card. Every card shares the same frame furniture, so the art is the
+  part that actually distinguishes them — measured, this widened the gap
+  between the right card and the nearest wrong one from 64 to 84. It assumes a
+  standard frame, so full-art and showcase printings can miss; it's consulted
+  *alongside* whole-card matching and only wins when it scores closer.
+
+- **Name check** reads the printed name with OCR and uses it to re-rank the
+  image matches. The two signals fail differently: hashing degrades gradually
+  as a photo softens, while OCR is either right or silent — on progressively
+  worse captures it read titles perfectly until the image went both soft *and*
+  dim, then returned nothing rather than guessing. It can only reorder
+  candidates the image match already found, so a misread can't invent a card.
+  Adds roughly 300ms per scan.
+
+Each result shows a verdict (Strong / Good / Weak / Unreliable) with the raw
+Hamming distance beside it. The distance is the useful number when a scan goes
+wrong: a real photograph of the right card lands near **d50**, while unrelated
+cards sit near **d70**.
+
+### Scanning from another device
+
+Browsers only expose a camera in a secure context. `localhost` qualifies; a
+LAN address does not. To scan from a phone you need HTTPS in front of the app,
+or your browser's flag for trusting an insecure origin on your network.
+
+---
+
+## Searching
 
 The search box uses a subset of Scryfall's syntax, because anyone with a Magic
 collection already types that. A bare word matches **name, type, set and
-keywords**; prefixes narrow it to one field:
+keywords**; a prefix narrows it to one field.
 
 | Query | Finds |
 |---|---|
 | `dragon` | name, type, set or keyword containing "dragon" |
-| `t:creature` | type line |
+| `t:creature` | type line — `t:legendary`, `t:artifact` |
 | `s:mbs` | set name or code |
 | `kw:flying` | abilities, from Scryfall's structured keyword list |
 | `o:destroy` | rules text |
 | `"exact phrase"` | the phrase, kept together |
 | `t:creature -kw:flying` | creatures that don't fly |
 
-Every term must match, so terms narrow rather than widen. The **Search tips**
-panel also lists the keywords actually present in your collection, with counts
-— click one to search for it. Listing what you own beats a generic glossary:
-every chip is guaranteed to return results.
+Terms combine with AND, so each one narrows the result.
 
-A **Reset** button appears whenever a search, filter or non-default sort is
-active, and clears all of them in a single request.
+Two deliberate choices:
 
-Results can be sorted by name, value, rarity, set, quantity or recently added.
-Sort and filters compose, and the sort clause is looked up by key rather than
-interpolated, so an unrecognised value falls back to name order. Keywords come from
-Scryfall's `keywords` field rather than a text search of the rules box —
-searching oracle text for "flying" also hits flavour text and reminder text.
-Rules text is deliberately kept out of the bare-word search for the same
-reason: common words like "creature" would match almost everything. Populate
-`keywords` by re-running `sync.py` (no re-download needed).
+- **Keywords come from Scryfall's `keywords` field**, not a text search of the
+  rules box. Searching oracle text for "flying" also matches flavour text and
+  reminder text.
+- **Rules text is excluded from the bare-word search.** Words like "creature"
+  or "target" appear in most rules boxes, so including it would make bare
+  searches match nearly everything. It stays available behind `o:`.
+
+The **Search tips** panel lists the keywords actually present in your
+collection with counts — click one to search for it. Listing what you own
+beats a generic glossary: every chip is guaranteed to return results.
+
+Results sort by name, value, rarity, set, quantity or recently added, and sort
+composes with the search and filters. **Reset** appears whenever anything is
+active and clears all of it in one request.
+
+---
 
 ## Stats
 
@@ -185,91 +176,140 @@ reason: common words like "creature" would match almost everything. Populate
 cards (ignoring reprints), value from both marketplaces, and breakdowns by
 colour and rarity.
 
-Two things the page states rather than leaves you to infer:
+Two things the page states rather than leaving you to infer:
 
 - **Colours count by colour identity, not mana cost.** A Swamp has no mana
-  cost, so counting by cost would file it under colourless. Identity includes
-  the mana a card produces, so basic lands land under their colour.
+  cost, so counting by cost files every basic land under "colourless".
+  Identity includes the mana a card produces, so lands sit under their colour.
 - **A multicolour card counts under each of its colours**, so the colour rows
-  sum to more than the collection size. That is the useful reading of "how
-  much black do I own".
+  sum to more than the collection size. That's the useful reading of "how much
+  black do I own".
+
+The colour bars use a single hue. The bar encodes magnitude; identity is
+carried by the mana symbol and the colour's name beside it. Six hues would
+encode identity twice over — and Magic's own colours put two confusable pairs
+next to each other in WUBRG order (blue/black and red/green both fail
+colour-vision separation checks).
+
+---
+
+## Prices
+
+Each card shows market prices from two marketplaces, linked to that card's
+page on each:
+
+- **TCGplayer** — arrives with the Scryfall sync; Scryfall's `usd`/`usd_foil`
+  fields *are* TCGplayer market prices. The outbound link is Scryfall's own
+  affiliate URL, exactly as its API supplies it.
+- **[Mana Pool](https://manapool.com)** — its `/api/v1/prices/singles`
+  endpoint is public and unauthenticated, returning every single's price keyed
+  by Scryfall ID.
+
+Prices move constantly, so re-run `python -m app.scryfall.prices` whenever you
+want current numbers. Roughly 84k of the 111k cards carry a Mana Pool price;
+cards without one show only the TCGplayer chip.
+
+---
 
 ## Your collection is safe
 
-Everything lives in `data/mtg.db`, an ordinary SQLite file on disk. Stopping
-the app, rebooting, and re-running the sync scripts all leave your collection
-untouched — schema changes are applied as in-place `ALTER TABLE` migrations
-rather than rebuilds. To back it up, copy that one file.
+Everything lives in `data/mtg.db`, an ordinary SQLite file. Stopping the app,
+rebooting, rebuilding the container and re-running the sync scripts all leave
+your collection untouched — schema changes are applied as in-place
+`ALTER TABLE` migrations rather than rebuilds. To back it up, copy that one
+file.
 
-## Notes
+---
 
-- **Re-syncing:** Scryfall updates card data continuously. Re-run `sync.py`
-  occasionally (it's an upsert, safe to repeat) and `hashing.py` after —
-  new cards won't have a hash yet. Both preserve your collection and existing
-  hashes; `sync.py --skip-download` re-parses the file already on disk.
-- **Scanning:** the browser uploads the whole camera frame and the server
-  locates the card within it, so the card does not have to be centred or
-  square to the lens. `detect-live.js` runs the same detection live and draws
-  the outline over the preview, turning green once it has held steady — that
-  outline is what the server will work from, because both run the same
-  algorithm with the same constants. If you change a threshold in
-  `detect.py`, change it in `detect-live.js` too or the preview will start
-  lying about what the server sees.
+## How it's organized
 
-- **Live detection needs `app/static/opencv.js`** (~10MB, fetched by
-  `fetch-assets.sh`). It loads asynchronously and the page works without it —
-  capture just loses the on-screen outline, since the server detects
-  independently either way.
+```
+app/
+  main.py               FastAPI app; startup loads the hash indexes into memory
+  config.py             paths, fingerprint size, match thresholds — one place to edit
+  db.py                 SQLite schema, connection helpers, in-place migrations
+  search.py             parses the Scryfall-style query into a SQL fragment
+  colors.py             colour-combination names (guilds, shards, wedges…)
+  mana.py               renders Scryfall {R} tokens as Mana font symbols
+  templating.py         shared Jinja environment, filters and globals
+  scryfall/
+    sync.py             bulk metadata download → scryfall_card
+    hashing.py          downloads art, computes whole-card and art-window hashes
+    prices.py           refreshes Mana Pool prices
+    keyrune.py          which set codes have a Keyrune symbol
+  recognition/
+    detect.py           OpenCV: find the card in a frame, warp it flat
+    match.py            packed-bit Hamming search over the in-memory index
+    ocr.py              reads the printed name; re-ranks image matches
+  routers/
+    collection.py       browse / search / sort / edit / delete
+    scan.py             capture → match → confirm
+    stats.py            totals, value, breakdowns
+  templates/            Jinja2 + HTMX partials
+  static/
+    scan.js             camera capture, auto-capture, toggles
+    detect-live.js      the server's detection, running live in the browser
+    preview.js          hover-to-enlarge card art
+    app.css             hand-written CSS for layout and anything HTMX injects
+    src.css             Tailwind input, compiled to tailwind.css
+data/                   gitignored — mtg.db, art cache, bulk files, scan captures
+```
 
-- **Recognition quality** depends far more on your scanning rig than the
-  algorithm: a straight-down camera angle and even, diffuse lighting will
-  outperform a nicer camera held at an angle. Cards leaning back are still the
-  weak spot — see `detect.py` for the thresholds.
-- **Fingerprint size matters more than camera resolution.** Measured against
-  the full index, capture resolution barely changes the hit rate above about
-  1280px — pHash downsamples internally, so extra pixels buy margin, not new
-  matches. The fingerprint length does change it: at 64 bits a glare patch
-  made the *wrong* card closer than the right one (margin −0.141, 0/8
-  correct); at 256 bits the margin turns positive and matches come back.
-  `PHASH_SIZE` in `config.py` controls this; changing it invalidates every
+Third-party assets (`opencv.js`, DaisyUI, Keyrune, Mana, htmx) and the
+Tailwind binary are gitignored and re-fetched with `./fetch-assets.sh`.
+
+---
+
+## Notes and tuning
+
+- **Re-syncing.** Scryfall updates continuously. Re-run `sync.py` occasionally
+  (it's an upsert, safe to repeat) and `hashing.py` after — new cards won't
+  have a hash yet. Both preserve your collection and existing hashes.
+  `sync.py --skip-download` re-parses the file already on disk, which is how
+  new columns get populated without another few hundred MB.
+
+- **Fingerprint size matters more than camera resolution.** Capture resolution
+  barely changes the hit rate above about 1280px, because pHash downsamples
+  internally — extra pixels buy margin, not new matches. Fingerprint length
+  does change it: at 64 bits a glare patch made the *wrong* card closer than
+  the right one; at 256 bits the margin turns positive and matches come back.
+  `PHASH_SIZE` in `config.py` controls this. Changing it invalidates every
   stored hash, and the app says so at startup.
-
-- **Auto-capture** (toggle on the scan page, remembered between visits) fires
-  the shutter once a card has been held still for about 0.85s. It disarms
-  after firing and re-arms only when the card leaves the view, so swapping in
-  the next card drives the rhythm rather than a timer. Taking the card away
-  also dismisses an already-confirmed result — but never pending candidates
-  you haven't acted on. It captures only; confirming a match stays manual,
-  since auto-adding a wrong card is worse than one extra click.
-
-- **Two optional matching aids**, toggled on the scan page and remembered
-  between visits:
-
-  - **Art matching** compares the illustration window on its own as well as
-    the whole card. Every card shares the same frame furniture, so the art is
-    the part that actually distinguishes them — measured, this widened the gap
-    between the right card and the nearest wrong one from 64 to 84. It assumes
-    a standard frame, so full-art and showcase printings can miss; it is
-    consulted *alongside* whole-card matching and only wins when it scores
-    closer. Needs `art_phash`, filled in by `hashing.py`.
-
-  - **Name check** reads the printed card name with OCR and uses it to
-    re-rank the image matches. The two signals fail differently: hashing
-    degrades gradually as a photo softens, while OCR is either right or
-    silent — on progressively worse captures it read titles perfectly until
-    the image went both soft and dim, then returned nothing rather than
-    guessing. It can only reorder candidates the image match already found,
-    so a misread cannot invent a card. Adds roughly 300ms per scan and needs
-    `rapidocr-onnxruntime`.
 
 - **Detection runs over two channels**, brightness and saturation. Glare is
   nearly colourless, so a reflection that erases the card's edges in
-  brightness leaves them visible in saturation. Both sets of candidates are
+  brightness leaves them visible in saturation. Candidates from both are
   scored and the best wins.
 
-- **Matching is pure pHash** for now, no ML dependencies. If glare/angle
-  tolerance becomes a real problem, the natural upgrade is swapping
-  `recognition/match.py` to compare CLIP/SigLIP embeddings instead of
-  Hamming distance on a hash — see the pretrained embeddings at
+- **Rig beats algorithm.** A straight-down camera angle and even, diffuse
+  lighting will outperform a better camera held at an angle. Dark or busy
+  playmats are the worst case — a black-bordered card on a black mat has
+  no edge to find.
+
+- **Live detection needs `app/static/opencv.js`** (~10MB). It loads
+  asynchronously and the page works without it; capture just loses the
+  on-screen outline, since the server detects independently either way.
+
+- **Styling.** `app/static/app.css` holds hand-written CSS for page structure
+  and anything HTMX injects; DaisyUI supplies component looks. Two reasons it
+  isn't the Tailwind Play CDN: that ships a compiler which generates styles in
+  the browser, so when it loads slowly every utility vanishes at once and the
+  page collapses into full-size stacked elements — and it misses utilities
+  that only appear in HTML fetched later. The standalone CLI scans template
+  *files* and emits a static stylesheet. Rebuild with `./build-css.sh`
+  (or `--watch`) after editing templates.
+
+- **The filter dropdowns use `appearance: base-select`.** A native `<select>`
+  picker is drawn by the OS, so CSS on the element can't touch the open menu —
+  it renders as system chrome against the app's theme. `base-select` makes the
+  picker styleable while the element stays a real `<select>`, so keyboard
+  navigation, form semantics and mobile behaviour are unchanged. Browsers
+  without support ignore the rules and show their native picker.
+
+- **Where matching could go next.** Recognition is perceptual hashing; the OCR
+  name check is the only ML dependency and it's optional. If glare tolerance
+  becomes a real problem, the natural upgrade is comparing CLIP/SigLIP
+  embeddings instead of Hamming distance — pretrained embeddings for every
+  Scryfall card exist at
   `TrevorJS/mtg-scryfall-cropped-art-embeddings-siglip-so400m-patch14-384`
-  on Hugging Face rather than training anything yourself.
+  on Hugging Face, so nothing needs training.

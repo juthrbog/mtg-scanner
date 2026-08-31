@@ -1,0 +1,25 @@
+# The build only needs source. Everything here is either huge, host-specific,
+# or regenerated inside the image.
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# The database, art cache and bulk downloads live in a volume, not the image.
+data/
+
+# Host-specific Tailwind binary; the image fetches its own Linux build.
+bin/
+
+# Third-party assets, re-fetched during the build.
+app/static/opencv.js
+app/static/daisyui.css
+app/static/keyrune.css
+app/static/mana.css
+app/static/htmx.min.js
+app/static/fonts/
+app/static/tailwind.css
+
+.git/
+.gitignore
+.DS_Store

@@ -120,6 +120,7 @@ def collection_stats(conn: sqlite3.Connection) -> dict:
 def stats_page(request: Request, conn=Depends(get_db)):
     stats = collection_stats(conn)
     return templates.TemplateResponse(
+        request,
         "stats.html",
-        {"request": request, "stats": stats, "totals": stats["totals"], "oob": False},
+        {"stats": stats, "totals": stats["totals"], "oob": False},
     )

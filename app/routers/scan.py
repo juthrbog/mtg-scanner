@@ -30,8 +30,9 @@ router = APIRouter()
 @router.get("/", response_class=HTMLResponse)
 def scan_page(request: Request, conn=Depends(get_db)):
     return templates.TemplateResponse(
+        request,
         "scan.html",
-        {"request": request, "index_size": len(index), "totals": collection_totals(conn), "oob": False},
+        {"index_size": len(index), "totals": collection_totals(conn), "oob": False},
     )
 
 
@@ -122,10 +123,9 @@ async def capture(
     )
 
     return templates.TemplateResponse(
+        request,
         "partials/scan_result.html",
-        {
-            "request": request,
-            "candidates": candidates,
+        {"candidates": candidates,
             "low_confidence": not candidates or candidates[0]["distance"] > HASH_MATCH_THRESHOLD,
             "ocr_title": ocr_title,
             "scan_image": f"/data/scans/{image_path.name}",
@@ -152,7 +152,8 @@ def confirm(request: Request, scryfall_id: str = Form(...), foil: bool = Form(Fa
     conn.execute("UPDATE scan_event SET accepted = 1 WHERE matched_id = ?", (scryfall_id,))
     card = conn.execute("SELECT name, set_name FROM scryfall_card WHERE id = ?", (scryfall_id,)).fetchone()
     return templates.TemplateResponse(
+        request,
         "partials/scan_confirmed.html",
-        {"request": request, "card": card, "quantity": quantity, "foil": foil,
+        {"card": card, "quantity": quantity, "foil": foil,
          "totals": collection_totals(conn), "oob": True},
     )

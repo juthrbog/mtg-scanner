@@ -131,8 +131,9 @@ def collection_page(request: Request, q: str = "", color: str = "", rarity: str 
                     sort: str = DEFAULT_SORT, conn=Depends(get_db)):
     cards = _query_collection(conn, q, color, rarity, sort)
     return templates.TemplateResponse(
+        request,
         "collection.html",
-        {"request": request, "cards": cards, "q": q, "color": color, "rarity": rarity,
+        {"cards": cards, "q": q, "color": color, "rarity": rarity,
          "search_summary": describe(parse(q)),
          "sort": sort if sort in SORTS else DEFAULT_SORT, "sorts": SORTS,
          "keywords": collection_keywords(conn),
@@ -145,8 +146,9 @@ def collection_grid(request: Request, q: str = "", color: str = "", rarity: str 
                     sort: str = DEFAULT_SORT, conn=Depends(get_db)):
     cards = _query_collection(conn, q, color, rarity, sort)
     return templates.TemplateResponse(
+        request,
         "partials/grid.html",
-        {"request": request, "cards": cards, "search_summary": describe(parse(q))},
+        {"cards": cards, "search_summary": describe(parse(q))},
     )
 
 
@@ -164,7 +166,10 @@ def card_detail(request: Request, entry_id: int, conn=Depends(get_db)):
         """,
         (entry_id,),
     ).fetchone()
-    return templates.TemplateResponse("partials/card_detail.html", {"request": request, "card": row})
+    return templates.TemplateResponse(
+        request,
+        "partials/card_detail.html",
+        {"card": row})
 
 
 @router.put("/{entry_id}", response_class=HTMLResponse)
@@ -186,8 +191,9 @@ def update_entry(
         )
     cards = _query_collection(conn, "", "", "")
     return templates.TemplateResponse(
+        request,
         "partials/grid.html",
-        {"request": request, "cards": cards, "totals": collection_totals(conn), "oob": True},
+        {"cards": cards, "totals": collection_totals(conn), "oob": True},
     )
 
 
@@ -196,6 +202,7 @@ def delete_entry(request: Request, entry_id: int, conn=Depends(get_db)):
     conn.execute("DELETE FROM collection_entry WHERE id = ?", (entry_id,))
     cards = _query_collection(conn, "", "", "")
     return templates.TemplateResponse(
+        request,
         "partials/grid.html",
-        {"request": request, "cards": cards, "totals": collection_totals(conn), "oob": True},
+        {"cards": cards, "totals": collection_totals(conn), "oob": True},
     )
