@@ -516,3 +516,42 @@ a.price-chip:hover {
   border-radius: 3px;
   background: rgba(128, 128, 128, 0.18);
 }
+
+/* ---- Sort control ---- */
+.sort-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8rem;
+  opacity: 0.85;
+  white-space: nowrap;
+}
+
+/* ---- Keyword chips in the search help ---- */
+.search-help__kw-intro { margin-top: 0.85rem; }
+
+.kw-cloud { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+
+.kw-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 1rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.kw-chip:hover { border-color: rgba(128, 128, 128, 0.7); background: rgba(128, 128, 128, 0.12); }
+.kw-chip:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+.kw-chip__count {
+  font-size: 0.7rem;
+  opacity: 0.55;
+  font-variant-numeric: tabular-nums;
+}

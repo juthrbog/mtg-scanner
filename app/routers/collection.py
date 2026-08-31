@@ -52,7 +52,53 @@ def collection_totals(conn: sqlite3.Connection) -> dict:
     }
 
 
-def _query_collection(conn: sqlite3.Connection, q: str, color: str, rarity: str) -> List[sqlite3.Row]:
+# Foil-aware price, reused by sorting and by the totals above.
+_PRICE = """CASE WHEN ce.foil AND sc.price_usd_foil IS NOT NULL
+                 THEN sc.price_usd_foil ELSE sc.price_usd END"""
+
+# Sort key -> (label, ORDER BY clause). Rarity needs an explicit order because
+# alphabetically "common" would outrank "mythic".
+SORTS = {
+    "name":      ("Name (A–Z)",        "sc.name COLLATE NOCASE ASC"),
+    "name_desc": ("Name (Z–A)",        "sc.name COLLATE NOCASE DESC"),
+    "value_desc":("Value (high first)", f"{_PRICE} IS NULL, {_PRICE} DESC"),
+    "value_asc": ("Value (low first)",  f"{_PRICE} IS NULL, {_PRICE} ASC"),
+    "rarity":    ("Rarity (mythic first)",
+                  "CASE sc.rarity WHEN 'mythic' THEN 0 WHEN 'rare' THEN 1 "
+                  "WHEN 'uncommon' THEN 2 WHEN 'common' THEN 3 ELSE 4 END, sc.name COLLATE NOCASE"),
+    "set":       ("Set",
+                  "sc.set_name COLLATE NOCASE, CAST(sc.collector_number AS INTEGER), sc.collector_number"),
+    "quantity":  ("Quantity (most first)", "ce.quantity DESC, sc.name COLLATE NOCASE"),
+    "added":     ("Recently added",        "ce.id DESC"),
+}
+DEFAULT_SORT = "name"
+
+
+def collection_keywords(conn: sqlite3.Connection) -> List[dict]:
+    """Keywords present in the collection, with how many cards carry each.
+
+    Listing what you actually own beats a generic glossary: every entry here
+    is guaranteed to return results when clicked.
+    """
+    rows = conn.execute(
+        """
+        SELECT sc.keywords, ce.quantity
+        FROM collection_entry ce
+        JOIN scryfall_card sc ON sc.id = ce.scryfall_id
+        WHERE sc.keywords IS NOT NULL AND sc.keywords != ''
+        """
+    ).fetchall()
+    counts: dict = {}
+    for row in rows:
+        for kw in row["keywords"].split(","):
+            kw = kw.strip()
+            if kw:
+                counts[kw] = counts.get(kw, 0) + row["quantity"]
+    return [{"name": k, "count": v} for k, v in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
+
+
+def _query_collection(conn: sqlite3.Connection, q: str, color: str, rarity: str,
+                      sort: str = DEFAULT_SORT) -> List[sqlite3.Row]:
     sql = """
         SELECT ce.id AS entry_id, ce.quantity, ce.foil, ce.condition,
                sc.id AS scryfall_id, sc.name, sc.set_code, sc.set_name,
@@ -74,24 +120,30 @@ def _query_collection(conn: sqlite3.Connection, q: str, color: str, rarity: str)
     if rarity:
         sql += " AND sc.rarity = ?"
         params.append(rarity)
-    sql += " ORDER BY sc.name"
+    # Look the clause up rather than interpolating user input into SQL.
+    order = SORTS.get(sort, SORTS[DEFAULT_SORT])[1]
+    sql += f" ORDER BY {order}"
     return conn.execute(sql, params).fetchall()
 
 
 @router.get("/", response_class=HTMLResponse)
-def collection_page(request: Request, q: str = "", color: str = "", rarity: str = "", conn=Depends(get_db)):
-    cards = _query_collection(conn, q, color, rarity)
+def collection_page(request: Request, q: str = "", color: str = "", rarity: str = "",
+                    sort: str = DEFAULT_SORT, conn=Depends(get_db)):
+    cards = _query_collection(conn, q, color, rarity, sort)
     return templates.TemplateResponse(
         "collection.html",
         {"request": request, "cards": cards, "q": q, "color": color, "rarity": rarity,
          "search_summary": describe(parse(q)),
+         "sort": sort if sort in SORTS else DEFAULT_SORT, "sorts": SORTS,
+         "keywords": collection_keywords(conn),
          "totals": collection_totals(conn), "oob": False},
     )
 
 
 @router.get("/grid", response_class=HTMLResponse)
-def collection_grid(request: Request, q: str = "", color: str = "", rarity: str = "", conn=Depends(get_db)):
-    cards = _query_collection(conn, q, color, rarity)
+def collection_grid(request: Request, q: str = "", color: str = "", rarity: str = "",
+                    sort: str = DEFAULT_SORT, conn=Depends(get_db)):
+    cards = _query_collection(conn, q, color, rarity, sort)
     return templates.TemplateResponse(
         "partials/grid.html",
         {"request": request, "cards": cards, "search_summary": describe(parse(q))},

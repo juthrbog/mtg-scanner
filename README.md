@@ -155,7 +155,14 @@ keywords**; prefixes narrow it to one field:
 | `"exact phrase"` | the phrase, kept together |
 | `t:creature -kw:flying` | creatures that don't fly |
 
-Every term must match, so terms narrow rather than widen. Keywords come from
+Every term must match, so terms narrow rather than widen. The **Search tips**
+panel also lists the keywords actually present in your collection, with counts
+— click one to search for it. Listing what you own beats a generic glossary:
+every chip is guaranteed to return results.
+
+Results can be sorted by name, value, rarity, set, quantity or recently added.
+Sort and filters compose, and the sort clause is looked up by key rather than
+interpolated, so an unrecognised value falls back to name order. Keywords come from
 Scryfall's `keywords` field rather than a text search of the rules box —
 searching oracle text for "flying" also hits flavour text and reminder text.
 Rules text is deliberately kept out of the bare-word search for the same

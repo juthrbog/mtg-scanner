@@ -9,11 +9,11 @@
            class="input input-bordered w-full max-w-sm"
            autocomplete="off" spellcheck="false"
            hx-get="/collection/grid" hx-trigger="keyup changed delay:300ms" hx-target="#grid"
-           hx-include="[name='color'],[name='rarity']">
+           hx-include="[name='color'],[name='rarity'],[name='sort']">
 
     <select name="color" class="select select-bordered"
             hx-get="/collection/grid" hx-trigger="change" hx-target="#grid"
-            hx-include="[name='q'],[name='rarity']">
+            hx-include="[name='q'],[name='rarity'],[name='sort']">
       <option value="">Any color</option>
       <option value="W" {% if color == "W" %}selected{% endif %}>White</option>
       <option value="U" {% if color == "U" %}selected{% endif %}>Blue</option>
@@ -24,13 +24,24 @@
 
     <select name="rarity" class="select select-bordered"
             hx-get="/collection/grid" hx-trigger="change" hx-target="#grid"
-            hx-include="[name='q'],[name='color']">
+            hx-include="[name='q'],[name='color'],[name='sort']">
       <option value="">Any rarity</option>
       <option value="common" {% if rarity == "common" %}selected{% endif %}>Common</option>
       <option value="uncommon" {% if rarity == "uncommon" %}selected{% endif %}>Uncommon</option>
       <option value="rare" {% if rarity == "rare" %}selected{% endif %}>Rare</option>
       <option value="mythic" {% if rarity == "mythic" %}selected{% endif %}>Mythic</option>
     </select>
+
+    <label class="sort-control">
+      <span>Sort</span>
+      <select name="sort" class="select select-bordered select-sm"
+              hx-get="/collection/grid" hx-trigger="change" hx-target="#grid"
+              hx-include="[name='q'],[name='color'],[name='rarity']">
+        {% for key, opt in sorts.items() %}
+        <option value="{{ key }}" {% if sort == key %}selected{% endif %}>{{ opt[0] }}</option>
+        {% endfor %}
+      </select>
+    </label>
   </div>
 
   <details class="search-help">
@@ -46,8 +57,41 @@
       </ul>
       <p>Combine freely — every term must match. <code>"exact phrase"</code> in quotes,
          and <code>-</code> excludes: <code>t:creature kw:flying -kw:defender</code>.</p>
+
+      {% if keywords %}
+      <p class="search-help__kw-intro">
+        Keywords in your collection — click one to search for it:
+      </p>
+      <div class="kw-cloud">
+        {% for kw in keywords %}
+        <button type="button" class="kw-chip"
+                data-kw="kw:{{ kw.name|lower }}"
+                title="{{ kw.count }} card{{ 's' if kw.count != 1 }} with {{ kw.name }}">
+          {{ kw.name }}<span class="kw-chip__count">{{ kw.count }}</span>
+        </button>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="search-help__kw-intro">
+        None of your cards have keywords yet — this list fills in as you scan.
+      </p>
+      {% endif %}
     </div>
   </details>
+
+<script>
+  // Clicking a keyword chip types it into the search box. Dispatching a real
+  // keyup is what matters: htmx listens for that, so a programmatic value
+  // change alone would update the field and leave the grid stale.
+  document.addEventListener("click", (e) => {
+    const chip = e.target.closest(".kw-chip");
+    if (!chip) return;
+    const box = document.querySelector("input[name=q]");
+    box.value = chip.dataset.kw;
+    box.dispatchEvent(new Event("keyup", { bubbles: true }));
+    box.focus();
+  });
+</script>
 
   <div id="grid" class="collection-grid">
     {% include "partials/grid.html" %}
