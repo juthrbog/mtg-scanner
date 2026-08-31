@@ -9,6 +9,12 @@
 // than nested next to each thumbnail — inside the card modal (or any element
 // with a transform or overflow:hidden) a nested popup would be clipped or
 // positioned against the wrong ancestor.
+//
+// It is also a `popover`, which is what lets it show *over* the card modal.
+// A <dialog> opened with showModal() is promoted to the browser's top layer
+// and paints a ::backdrop across everything beneath it — no z-index can climb
+// past that, so an ordinary element renders behind the dim. Popovers join the
+// same top layer, so the preview sits above the backdrop instead of under it.
 
 (function () {
   const GAP = 12;
@@ -21,7 +27,9 @@
     if (popup) return;
     popup = document.createElement("div");
     popup.className = "hover-preview";
-    popup.hidden = true;
+    // "manual" keeps it under our control: no light-dismiss, and opening it
+    // never closes the card modal the way an "auto" popover would.
+    popup.setAttribute("popover", "manual");
     popupImg = document.createElement("img");
     popupImg.alt = "";
     popup.appendChild(popupImg);
@@ -64,13 +72,30 @@
       // Size isn't known until the image loads; place again once it is.
       popupImg.addEventListener("load", reposition, { once: true });
     }
+    // Clear the fallback's attribute unconditionally. Both mechanisms are in
+    // play, and `[hidden]` wins over a popover being open — so a single early
+    // hide() taking the fallback branch would otherwise leave the popup
+    // display:none forever, open but invisible.
     popup.hidden = false;
+    if (!popup.matches(":popover-open")) {
+      try {
+        popup.showPopover();
+      } catch (err) {
+        // Older engines without popover support still get a working preview,
+        // just beneath the modal backdrop rather than above it.
+      }
+    }
     reposition();
   }
 
   function hide() {
     activeTrigger = null;
-    if (popup) popup.hidden = true;
+    if (!popup) return;
+    if (popup.matches(":popover-open")) {
+      popup.hidePopover();
+    } else {
+      popup.hidden = true;   // fallback for engines without popover support
+    }
   }
 
   document.addEventListener("mouseover", (e) => {

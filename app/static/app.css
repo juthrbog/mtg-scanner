@@ -265,8 +265,18 @@ a.price-chip:hover {
 /* ---- Card art hover preview ----
    A single popup element on <body>, positioned by preview.js. Any image with
    a data-preview-src attribute triggers it. */
-.hover-preview {
+/* A popover carries user-agent styles — centred inset, margin, border, padding
+   and its own background — all of which fight the coordinates preview.js sets.
+   Reset them and keep position:fixed so left/top mean what they say. */
+.hover-preview,
+.hover-preview:popover-open {
   position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
   z-index: 200;
   pointer-events: none;
 }
