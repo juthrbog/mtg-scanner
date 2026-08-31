@@ -48,6 +48,13 @@ Two notes on why it's set up this way:
   not do reliably.
 - **`app/static/app.css`** holds hand-written CSS for page structure and the
   card-art hover preview. Component looks still come from DaisyUI.
+- **The filter dropdowns use `appearance: base-select`.** A native `<select>`
+  picker is drawn by the OS, so CSS on the element cannot touch the open menu
+  — it renders as stock system chrome against the app's own theme. Opting into
+  `base-select` makes the picker styleable while the element stays a real
+  `<select>`, so keyboard navigation, form semantics and mobile behaviour are
+  unchanged. Browsers without support ignore the rules and show their native
+  picker.
 
 ## First run
 
@@ -159,6 +166,9 @@ Every term must match, so terms narrow rather than widen. The **Search tips**
 panel also lists the keywords actually present in your collection, with counts
 — click one to search for it. Listing what you own beats a generic glossary:
 every chip is guaranteed to return results.
+
+A **Reset** button appears whenever a search, filter or non-default sort is
+active, and clears all of them in a single request.
 
 Results can be sorted by name, value, rarity, set, quantity or recently added.
 Sort and filters compose, and the sort clause is looked up by key rather than

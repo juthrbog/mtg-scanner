@@ -555,3 +555,117 @@ a.price-chip:hover {
   opacity: 0.55;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---- Filter dropdowns ----
+   Native <select> pickers are drawn by the OS, so no amount of CSS on the
+   element itself touches the open menu — that is why the list looked like
+   stock macOS against a dark page. `appearance: base-select` opts the element
+   and its picker into styleable browser defaults, so the menu can match the
+   rest of the app while the element stays a real <select>: keyboard
+   navigation, form semantics and mobile behaviour all still come for free.
+
+   Browsers without support ignore these rules and render their native picker,
+   which is a perfectly good fallback. */
+.filter-select,
+.filter-select::picker(select) {
+  appearance: base-select;
+}
+
+.filter-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.7rem;
+  font: inherit;
+  font-size: 0.85rem;
+  color: inherit;
+  background: var(--surface-raised, rgba(128, 128, 128, 0.08));
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.filter-select:hover { border-color: rgba(128, 128, 128, 0.65); }
+.filter-select:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* The disclosure arrow the base appearance provides. */
+.filter-select::picker-icon {
+  color: currentColor;
+  opacity: 0.5;
+  transition: transform 0.15s ease;
+}
+.filter-select:open::picker-icon { transform: rotate(180deg); }
+
+.filter-select::picker(select) {
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 0.6rem;
+  padding: 0.3rem;
+  background: var(--picker-bg, #1c1e24);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  /* Match the trigger's width rather than hugging the longest option. */
+  min-width: anchor-size(width);
+}
+
+.filter-select option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.35rem;
+  font-size: 0.85rem;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.filter-select option:hover {
+  background: rgba(128, 128, 128, 0.2);
+}
+
+/* The browser draws its own blue focus ring here, which is the one piece of
+   OS chrome still visible once the picker is themed. Replace it with a
+   background + inset ring in the current text colour: a menu item's highlight
+   is a legitimate focus indicator, and this one follows the theme. */
+.filter-select option:focus,
+.filter-select option:focus-visible {
+  outline: none;
+  background: rgba(128, 128, 128, 0.28);
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+/* The tick the base appearance renders for the current value. Left visible —
+   it is the only thing distinguishing the selected option once the OS
+   highlight is gone. */
+.filter-select option::checkmark { color: currentColor; opacity: 0.85; }
+.filter-select option:checked { font-weight: 600; }
+
+/* Light theme: the picker needs a light surface or it inherits the dark one. */
+:root:not([data-theme="dark"]) .filter-select::picker(select) { --picker-bg: #ffffff; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .filter-select::picker(select) { --picker-bg: #1c1e24; }
+}
+:root[data-theme="dark"] .filter-select::picker(select) { --picker-bg: #1c1e24; }
+
+/* ---- Reset filters ---- */
+.reset-filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: border-color 0.12s ease, background-color 0.12s ease, opacity 0.12s ease;
+}
+.reset-filters:hover { border-color: rgba(128, 128, 128, 0.7); background: rgba(128, 128, 128, 0.12); opacity: 1; }
+.reset-filters:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* Hidden until something is actually filtered, so the toolbar stays quiet in
+   the default state. */
+.reset-filters[hidden] { display: none; }

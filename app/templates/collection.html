@@ -11,7 +11,7 @@
            hx-get="/collection/grid" hx-trigger="input changed delay:300ms, search" hx-target="#grid"
            hx-include="[name='color'],[name='rarity'],[name='sort']">
 
-    <select name="color" class="select select-bordered"
+    <select name="color" class="filter-select"
             hx-get="/collection/grid" hx-trigger="change" hx-target="#grid"
             hx-include="[name='q'],[name='rarity'],[name='sort']">
       <option value="">Any color</option>
@@ -22,7 +22,7 @@
       <option value="G" {% if color == "G" %}selected{% endif %}>Green</option>
     </select>
 
-    <select name="rarity" class="select select-bordered"
+    <select name="rarity" class="filter-select"
             hx-get="/collection/grid" hx-trigger="change" hx-target="#grid"
             hx-include="[name='q'],[name='color'],[name='sort']">
       <option value="">Any rarity</option>
@@ -34,7 +34,7 @@
 
     <label class="sort-control">
       <span>Sort</span>
-      <select name="sort" class="select select-bordered select-sm"
+      <select name="sort" class="filter-select"
               hx-get="/collection/grid" hx-trigger="change" hx-target="#grid"
               hx-include="[name='q'],[name='color'],[name='rarity']">
         {% for key, opt in sorts.items() %}
@@ -42,6 +42,10 @@
         {% endfor %}
       </select>
     </label>
+
+    <button type="button" id="reset-filters" class="reset-filters" hidden>
+      <span aria-hidden="true">&times;</span> Reset
+    </button>
   </div>
 
   <details class="search-help">
@@ -80,17 +84,50 @@
   </details>
 
 <script>
-  // Clicking a keyword chip types it into the search box. Dispatching the
-  // event matters as much as setting the value: htmx listens for `input`, so
-  // assigning .value alone would update the field and leave the grid stale.
-  document.addEventListener("click", (e) => {
-    const chip = e.target.closest(".kw-chip");
-    if (!chip) return;
+  (() => {
     const box = document.querySelector("input[name=q]");
-    box.value = chip.dataset.kw;
-    box.dispatchEvent(new Event("input", { bubbles: true }));
-    box.focus();
-  });
+    const color = document.querySelector("select[name=color]");
+    const rarity = document.querySelector("select[name=rarity]");
+    const sort = document.querySelector("select[name=sort]");
+    const reset = document.getElementById("reset-filters");
+    const DEFAULT_SORT = "name";
+
+    // Only offer Reset when there is something to reset.
+    function refreshResetVisibility() {
+      const active = box.value.trim() || color.value || rarity.value || sort.value !== DEFAULT_SORT;
+      reset.hidden = !active;
+    }
+
+    // Clicking a keyword chip types it into the search box. Dispatching the
+    // event matters as much as setting the value: htmx listens for `input`,
+    // so assigning .value alone would update the field and leave the grid
+    // stale.
+    document.addEventListener("click", (e) => {
+      const chip = e.target.closest(".kw-chip");
+      if (!chip) return;
+      box.value = chip.dataset.kw;
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+      box.focus();
+      refreshResetVisibility();
+    });
+
+    reset.addEventListener("click", () => {
+      box.value = "";
+      color.value = "";
+      rarity.value = "";
+      sort.value = DEFAULT_SORT;
+      // One request, not four: fire the event on the search box, which already
+      // sends the other three along via hx-include.
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+      refreshResetVisibility();
+      box.focus();
+    });
+
+    [box, color, rarity, sort].forEach((el) =>
+      el.addEventListener("input", refreshResetVisibility)
+    );
+    refreshResetVisibility();
+  })();
 </script>
 
   <div id="grid" class="collection-grid">
