@@ -6,11 +6,14 @@
     <a href="/decks/" class="deck-back">← Decks</a>
     <h1 class="page-title">{{ deck.name }}</h1>
   </div>
-  <button class="btn btn-error btn-outline btn-sm"
-          hx-delete="/decks/{{ deck.id }}"
-          hx-confirm="Delete “{{ deck.name }}”? This can't be undone.">
-    Delete deck
-  </button>
+  <div class="deck-actions">
+    <button type="button" class="btn btn-sm" id="export-open">Export</button>
+    <button class="btn btn-error btn-outline btn-sm"
+            hx-delete="/decks/{{ deck.id }}"
+            hx-confirm="Delete “{{ deck.name }}”? This can't be undone.">
+      Delete deck
+    </button>
+  </div>
 </div>
 
 <div class="deck-layout">
@@ -46,4 +49,71 @@
     {% endif %}
   </aside>
 </div>
+
+<dialog id="export-modal" class="modal">
+  <div class="modal-box max-w-2xl">
+    <h3 class="export-title">Export “{{ deck.name }}”</h3>
+    <div class="export-formats">
+      {% for key, meta in formats.items() %}
+      <label class="export-format">
+        <input type="radio" name="export-format" value="{{ key }}"
+               {% if loop.first %}checked{% endif %}>
+        <span class="export-format__name">{{ meta[0] }}</span>
+        <span class="export-format__note">{{ meta[2] }}</span>
+      </label>
+      {% endfor %}
+    </div>
+
+    <textarea id="export-text" class="export-text" readonly spellcheck="false"
+              aria-label="Deck list"></textarea>
+
+    <div class="export-actions">
+      <button type="button" class="btn btn-primary btn-sm" id="export-copy">Copy</button>
+      <a class="btn btn-sm" id="export-download" href="#" download>Download</a>
+      <form method="dialog" class="ml-auto"><button class="btn btn-ghost btn-sm">Close</button></form>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<script>
+  (() => {
+    const modal = document.getElementById("export-modal");
+    const text = document.getElementById("export-text");
+    const dl = document.getElementById("export-download");
+    const copy = document.getElementById("export-copy");
+    const base = "/decks/{{ deck.id }}/export";
+
+    function chosen() {
+      return document.querySelector("input[name=export-format]:checked").value;
+    }
+
+    async function load() {
+      const fmt = chosen();
+      dl.href = `${base}?format=${fmt}&download=true`;
+      text.value = "Loading…";
+      const res = await fetch(`${base}?format=${fmt}`);
+      text.value = await res.text();
+    }
+
+    document.getElementById("export-open").addEventListener("click", () => {
+      modal.showModal();
+      load();
+    });
+    document.querySelectorAll("input[name=export-format]").forEach(
+      (el) => el.addEventListener("change", load));
+
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(text.value);
+      } catch (err) {
+        // Clipboard access needs a secure context and can be refused; falling
+        // back to selecting the text still lets the user copy it by hand.
+        text.select();
+      }
+      copy.textContent = "Copied";
+      setTimeout(() => (copy.textContent = "Copy"), 1200);
+    });
+  })();
+</script>
 {% endblock %}

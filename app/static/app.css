@@ -801,3 +801,33 @@ a.price-chip:hover {
 }
 .deck-row:hover .deck-row__remove, .deck-row__remove:focus-visible { opacity: 0.6; }
 .deck-row__remove:hover { opacity: 1; color: #ef4444; }
+
+/* ---- Deck export ---- */
+.deck-actions { display: flex; gap: 0.5rem; align-items: center; }
+
+.export-title { font-size: 1rem; font-weight: 600; margin: 0 0 0.75rem; }
+
+.export-formats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.4rem; margin-bottom: 0.85rem;
+}
+.export-format {
+  display: grid; grid-template-columns: auto 1fr; gap: 0 0.5rem; align-items: center;
+  padding: 0.5rem 0.65rem; border: 1px solid rgba(128,128,128,0.28);
+  border-radius: 0.5rem; cursor: pointer; font-size: 0.82rem;
+}
+.export-format:hover { border-color: rgba(128,128,128,0.6); }
+.export-format:has(input:checked) { border-color: #4F6BD8; background: rgba(79,107,216,0.1); }
+.export-format__name { font-weight: 600; }
+.export-format__note { grid-column: 2; font-size: 0.7rem; opacity: 0.6; line-height: 1.3; }
+
+.export-text {
+  width: 100%; height: 15rem; resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem;
+  line-height: 1.5; padding: 0.6rem 0.7rem;
+  border: 1px solid rgba(128,128,128,0.28); border-radius: 0.5rem;
+  background: rgba(128,128,128,0.06); color: inherit; white-space: pre;
+}
+
+.export-actions { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.75rem; }
+.ml-auto { margin-left: auto; }

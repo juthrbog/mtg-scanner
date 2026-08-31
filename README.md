@@ -10,8 +10,9 @@ with a shoebox of cards.
 
 A local app for cataloguing a Magic: The Gathering collection. Point a webcam
 at a card, confirm the match, and it's in your collection — searchable,
-sortable, and browsable from the same page. No cloud service, no account, one
-SQLite file on your own disk.
+sortable, and browsable from the same page. Then build Commander decks out of
+what you actually own, and export them to any of the usual deck sites. No cloud
+service, no account, one SQLite file on your own disk.
 
 **FastAPI + HTMX + Tailwind/DaisyUI + SQLite.** Card data from
 [Scryfall](https://scryfall.com/docs/api), recognition via OpenCV card
@@ -218,6 +219,36 @@ Each deck also shows a mana curve over non-lands and cards grouped by type.
 Deck rules live in `app/deck.py` as plain functions over card rows, so they can
 be exercised without a request or a database.
 
+### Exporting a deck
+
+**Export** on a deck opens a preview you can copy, or download as a file. Every
+mainstream deck tool parses roughly the same shape — a quantity, then a card
+name, one per line — and differs mainly in whether it wants the exact printing
+and how it marks the commander:
+
+| Format | Looks like | For |
+| --- | --- | --- |
+| **Plain text** | `1 Sol Ring` | Moxfield, Archidekt, TappedOut, Cockatrice — and what to try when another import fails |
+| **Moxfield / Archidekt** | the same, under `Commander` and `Deck` headers | filling the command zone on import |
+| **MTG Arena** | `1 Sol Ring (ECC) 57` | pinning the exact printing you own |
+| **CSV** | one row per card, with set and collector number | spreadsheets and collection trackers |
+
+Two details that decide whether an import succeeds:
+
+- **Arena wants the front face only.** `Obyra's Attendants // Desperate Parry`
+  is rejected; `Obyra's Attendants` is not. The plain formats keep the full
+  name, which is what the deck sites expect.
+- **Arena's parser chokes on leading zeros** in collector numbers, so they are
+  stripped.
+
+Plain text has no `Commander` header on purpose — the sites that understand a
+command zone read the header formats above, and the rest would treat the header
+as a card name and fail the whole import. There the commander is just the first
+line.
+
+Rendering lives in `app/export.py`, separate from the route, so adding a format
+means adding a branch and a `FORMATS` entry.
+
 ---
 
 ## Stats
@@ -281,6 +312,8 @@ app/
   search.py             parses the Scryfall-style query into a SQL fragment
   colors.py             colour-combination names (guilds, shards, wedges…)
   mana.py               renders Scryfall {R} tokens as Mana font symbols
+  deck.py               Commander rules as plain functions over card rows
+  export.py             renders a deck as text other Magic tools can import
   templating.py         shared Jinja environment, filters and globals
   scryfall/
     sync.py             bulk metadata download → scryfall_card
@@ -294,6 +327,7 @@ app/
   routers/
     collection.py       browse / search / sort / edit / delete
     scan.py             capture → match → confirm
+    decks.py            build, validate and export Commander decks
     stats.py            totals, value, breakdowns
   templates/            Jinja2 + HTMX partials
   static/

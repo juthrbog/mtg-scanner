@@ -5,10 +5,11 @@ import sqlite3
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 
 from ..db import get_db
 from ..deck import DECK_SIZE, categorise, curve, identity_of, validate
+from ..export import FORMATS, render
 from ..search import parse
 from ..templating import templates
 from .collection import collection_totals
@@ -19,7 +20,7 @@ router = APIRouter()
 CARD_FIELDS = """
     sc.id AS scryfall_id, sc.oracle_id, sc.name, sc.type_line, sc.oracle_text, sc.mana_cost,
     sc.color_identity, sc.colors, sc.commander_legal, sc.cmc, sc.rarity,
-    sc.set_code, sc.set_name, sc.image_small, sc.image_normal,
+    sc.set_code, sc.set_name, sc.collector_number, sc.image_small, sc.image_normal,
     sc.price_usd, sc.manapool_nm_cents, sc.manapool_cents
 """
 
@@ -204,8 +205,37 @@ def deck_detail(request: Request, deck_id: int, conn=Depends(get_db)):
     ctx = _deck_context(conn, deck_id)
     return templates.TemplateResponse(
         request, "deck_detail.html",
-        {**ctx, "totals": collection_totals(conn), "oob": False},
+        {**ctx, "formats": FORMATS, "totals": collection_totals(conn), "oob": False},
     )
+
+
+def _safe_filename(name: str, ext: str) -> str:
+    keep = "".join(ch if ch.isalnum() or ch in " -_" else "" for ch in name).strip()
+    return f"{(keep or 'deck').replace(' ', '-').lower()}.{ext}"
+
+
+@router.get("/{deck_id}/export")
+def export_deck(deck_id: int, format: str = "text", download: bool = False, conn=Depends(get_db)):
+    """Deck as importable text.
+
+    Served as text/plain either way; `download` only switches the disposition,
+    so the same URL can back both a preview and a Save-as.
+    """
+    if format not in FORMATS:
+        raise HTTPException(status_code=400, detail="Unknown export format")
+    deck = _deck_row(conn, deck_id)
+    body = render(
+        format, deck,
+        _card(conn, deck["commander_id"]) if deck["commander_id"] else None,
+        _card(conn, deck["partner_id"]) if deck["partner_id"] else None,
+        _deck_cards(conn, deck_id),
+    )
+    headers = {}
+    if download:
+        headers["Content-Disposition"] = (
+            f'attachment; filename="{_safe_filename(deck["name"], FORMATS[format][1])}"'
+        )
+    return PlainTextResponse(body, headers=headers)
 
 
 @router.get("/{deck_id}/search", response_class=HTMLResponse)
