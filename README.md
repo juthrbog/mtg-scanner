@@ -187,6 +187,11 @@ the Add button disappears once every copy is in the deck.
 
 Ownership is counted by *oracle identity*, not by printing: a Sol Ring is a
 Sol Ring whichever set it came from, and Scryfall lists 140 printings of it.
+Own the same card in two sets and it appears once, with the copies combined.
+
+The search reads the collection itself rather than the card database filtered
+by ownership, so the art you see is the copy you actually hold — including the
+right one when a set has both a regular and a showcase printing.
 
 The deck view validates continuously and explains what is wrong rather than
 just refusing:

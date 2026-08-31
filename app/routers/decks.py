@@ -84,14 +84,21 @@ def _owned_counts(conn: sqlite3.Connection) -> dict:
     }
 
 
-# Only cards the collection actually holds are offered. Decks here are for
-# building out of the shoebox, not wishlists, so a card you don't own should
-# never be a click away from ending up in a list you think you can sleeve.
-OWNED_ONLY = """
-    EXISTS (SELECT 1 FROM collection_entry ce
-            JOIN scryfall_card own ON own.id = ce.scryfall_id
-            WHERE own.oracle_id = sc.oracle_id)
+# Deck building searches the collection itself rather than the whole card
+# database filtered by ownership. Searching everything and then asking "do you
+# own any printing of this?" returns whichever printing the group happened to
+# collapse to — which showed a showcase Hama Pashar to someone holding the
+# regular one. Selecting from collection_entry means every row offered is a
+# card in hand, with its own art.
+#
+# MAX(ce.id) is not decorative: SQLite fills bare columns from the row that
+# produced the min/max, so this makes the chosen printing the most recently
+# added one instead of arbitrary.
+OWNED_SOURCE = """
+    FROM collection_entry ce
+    JOIN scryfall_card sc ON sc.id = ce.scryfall_id
 """
+OWNED_PICK = "MAX(ce.id) AS _pick, SUM(ce.quantity) AS owned_qty"
 
 
 def _touch(conn: sqlite3.Connection, deck_id: int) -> None:
@@ -162,7 +169,6 @@ def _commander_search(conn: sqlite3.Connection, q: str, limit: int = 24) -> List
     where = [
         "sc.commander_legal = 1",
         "sc.image_small IS NOT NULL",
-        OWNED_ONLY,
         "((sc.type_line LIKE '%Legendary%' AND sc.type_line LIKE '%Creature%')"
         " OR sc.oracle_text LIKE '%can be your commander%')",
     ]
@@ -172,7 +178,8 @@ def _commander_search(conn: sqlite3.Connection, q: str, limit: int = 24) -> List
         params.extend(parsed.params)
     order, order_params = _relevance_order(q)
     return conn.execute(
-        f"""SELECT {CARD_FIELDS} FROM scryfall_card sc
+        f"""SELECT {CARD_FIELDS}, {OWNED_PICK}
+            {OWNED_SOURCE}
             WHERE {' AND '.join(where)}
             GROUP BY sc.oracle_id
             ORDER BY {order} LIMIT ?""",
@@ -212,14 +219,15 @@ def card_search(request: Request, deck_id: int, q: str = "", conn=Depends(get_db
     results = []
     if q and q.strip():
         parsed = parse(q)
-        where = ["sc.image_small IS NOT NULL", OWNED_ONLY]
+        where = ["sc.image_small IS NOT NULL"]
         params: list = []
         if parsed.sql:
             where.append(f"({parsed.sql})")
             params.extend(parsed.params)
         order, order_params = _relevance_order(q)
         rows = conn.execute(
-            f"""SELECT {CARD_FIELDS} FROM scryfall_card sc
+            f"""SELECT {CARD_FIELDS}, {OWNED_PICK}
+                {OWNED_SOURCE}
                 WHERE {' AND '.join(where)}
                 GROUP BY sc.oracle_id
                 ORDER BY {order} LIMIT 30""",
