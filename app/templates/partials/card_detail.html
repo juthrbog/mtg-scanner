@@ -1,0 +1,62 @@
+{% if card %}
+<div class="card-detail">
+  <img class="card-detail__art" src="{{ card.image_normal }}" alt="{{ card.name }}"
+       data-preview-src="{{ card.image_normal }}">
+
+  <div class="card-detail__body">
+    <h3 class="text-lg font-bold">{{ card.name }}</h3>
+
+    <p class="card-detail__meta text-sm text-base-content/70">
+      {% if card.set_code|lower in keyrune_sets %}
+      <i class="ss ss-{{ card.set_code|lower }} ss-{{ card.rarity }} set-symbol"
+         title="{{ card.set_name }} ({{ card.rarity }})"></i>
+      {% else %}
+      <span class="set-symbol-fallback" title="{{ card.set_name }}">{{ card.set_code }}</span>
+      {% endif %}
+      <span>{{ card.set_name }} · #{{ card.collector_number }} · {{ card.rarity }}</span>
+    </p>
+
+    <p class="text-sm">{{ card.mana_cost|mana }} — {{ card.type_line }}</p>
+
+    {% set combo = card.colors|combo_name %}
+    {% if combo %}
+    <p class="text-sm">
+      <span class="combo-badge combo-badge--lg" title="{{ card.colors|combo_full_name }}">{{ combo }}</span>
+      {% set detail = card.colors|combo_detail %}
+      {% if detail %}<span class="text-base-content/60">{{ detail }}</span>{% endif %}
+    </p>
+    {% endif %}
+    <p class="card-detail__oracle text-sm text-base-content/80">{{ card.oracle_text|mana }}</p>
+
+    {% include "partials/prices.html" %}
+
+    <form class="card-detail__form" hx-put="/collection/{{ card.id }}" hx-target="#grid"
+          hx-on::after-request="document.getElementById('card-modal').close()">
+      <label class="card-detail__field">
+        <span>Qty</span>
+        <input type="number" name="quantity" value="{{ card.quantity }}" min="0"
+               class="input input-bordered input-sm" style="width:5rem">
+      </label>
+      <label class="card-detail__field">
+        <span>Condition</span>
+        <select name="condition" class="select select-bordered select-sm">
+          {% for cond in ["NM", "LP", "MP", "HP", "DMG"] %}
+          <option value="{{ cond }}" {% if card.condition == cond %}selected{% endif %}>{{ cond }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="card-detail__field">
+        <span>Foil</span>
+        <input type="checkbox" name="foil" class="checkbox checkbox-sm" {% if card.foil %}checked{% endif %}>
+      </label>
+      <button class="btn btn-primary btn-sm">Save</button>
+      <button type="button" class="btn btn-error btn-outline btn-sm"
+              hx-delete="/collection/{{ card.id }}" hx-target="#grid"
+              hx-confirm="Remove {{ card.name }} from your collection?"
+              hx-on::after-request="document.getElementById('card-modal').close()">
+        Remove
+      </button>
+    </form>
+  </div>
+</div>
+{% endif %}

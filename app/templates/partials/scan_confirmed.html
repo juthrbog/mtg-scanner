@@ -1,0 +1,16 @@
+{# Say whether this created a new entry or bumped one you already had, so a
+   repeat scan visibly does the right thing instead of looking identical to
+   adding a card for the first time. #}
+<div role="alert" class="alert alert-success">
+  <span>
+    {% if quantity and quantity > 1 %}
+      <strong>{{ card.name }}</strong> — you now have {{ quantity }}{% if foil %} foil{% endif %} copies.
+    {% else %}
+      Added <strong>{{ card.name }}</strong> ({{ card.set_name }}) to your collection.
+    {% endif %}
+  </span>
+</div>
+<button type="button" class="btn btn-outline btn-sm mt-2" onclick="document.getElementById('scan-result').innerHTML = ''">
+  Scan another
+</button>
+{% if oob %}{% include "partials/totals.html" %}{% endif %}

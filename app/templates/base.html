@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}MTG Scanner{% endblock %}</title>
+  <!-- Everything is served locally: no runtime CDN, so the app styles
+       correctly offline and can't be broken by a slow or blocked CDN.
+       Rebuild tailwind.css with ./build-css.sh after editing templates. -->
+  <link rel="stylesheet" href="/static/daisyui.css">
+  <link rel="stylesheet" href="/static/tailwind.css">
+  <link rel="stylesheet" href="/static/keyrune.css">
+  <link rel="stylesheet" href="/static/mana.css">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js"></script>
+  <script src="/static/preview.js" defer></script>
+</head>
+<body class="min-h-screen bg-base-200">
+  <div class="navbar bg-base-100 shadow-sm px-6">
+    <div class="flex-1">
+      <a href="/collection" class="btn btn-ghost text-xl">🃏 MTG Scanner</a>
+    </div>
+    <div class="flex items-center gap-3">
+      {% include "partials/totals.html" %}
+      <a href="/collection" class="btn btn-ghost">Collection</a>
+      <a href="/scan" class="btn btn-primary">Scan a card</a>
+    </div>
+  </div>
+
+  <main class="max-w-6xl mx-auto p-6">
+    {% block content %}{% endblock %}
+  </main>
+
+  <dialog id="card-modal" class="modal">
+    <div id="modal-content" class="modal-box max-w-2xl"></div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+</body>
+</html>

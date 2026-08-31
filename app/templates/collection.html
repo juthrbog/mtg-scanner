@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Collection · MTG Scanner{% endblock %}
+{% block content %}
+<div class="flex flex-col gap-4">
+  <div class="flex flex-wrap gap-3 items-center">
+    <input type="search" name="q" value="{{ q }}"
+           placeholder="Search your collection..."
+           class="input input-bordered w-full max-w-xs"
+           hx-get="/collection/grid" hx-trigger="keyup changed delay:300ms" hx-target="#grid"
+           hx-include="[name='color'],[name='rarity']">
+
+    <select name="color" class="select select-bordered"
+            hx-get="/collection/grid" hx-trigger="change" hx-target="#grid"
+            hx-include="[name='q'],[name='rarity']">
+      <option value="">Any color</option>
+      <option value="W" {% if color == "W" %}selected{% endif %}>White</option>
+      <option value="U" {% if color == "U" %}selected{% endif %}>Blue</option>
+      <option value="B" {% if color == "B" %}selected{% endif %}>Black</option>
+      <option value="R" {% if color == "R" %}selected{% endif %}>Red</option>
+      <option value="G" {% if color == "G" %}selected{% endif %}>Green</option>
+    </select>
+
+    <select name="rarity" class="select select-bordered"
+            hx-get="/collection/grid" hx-trigger="change" hx-target="#grid"
+            hx-include="[name='q'],[name='color']">
+      <option value="">Any rarity</option>
+      <option value="common" {% if rarity == "common" %}selected{% endif %}>Common</option>
+      <option value="uncommon" {% if rarity == "uncommon" %}selected{% endif %}>Uncommon</option>
+      <option value="rare" {% if rarity == "rare" %}selected{% endif %}>Rare</option>
+      <option value="mythic" {% if rarity == "mythic" %}selected{% endif %}>Mythic</option>
+    </select>
+  </div>
+
+  <div id="grid" class="collection-grid">
+    {% include "partials/grid.html" %}
+  </div>
+</div>
+{% endblock %}

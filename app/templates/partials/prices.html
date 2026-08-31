@@ -1,0 +1,29 @@
+{# Market prices from both marketplaces, each linking out to that card's page.
+   TCGplayer figures come from Scryfall (its usd/usd_foil are TCGplayer market
+   prices); Mana Pool's come from its public prices feed. #}
+<div class="price-row">
+  {% set tcg = card.price_usd_foil if card.foil and card.price_usd_foil else card.price_usd %}
+  {% if tcg %}
+  <a class="price-chip" {% if card.tcgplayer_url %}href="{{ card.tcgplayer_url }}" target="_blank" rel="noopener noreferrer"{% endif %}
+     title="TCGplayer market price{% if card.foil %} (foil){% endif %}">
+    <img src="/static/icons/tcgplayer.png" alt="" width="16" height="16">
+    <span class="price-chip__site">TCGplayer</span>
+    <span class="price-chip__value">${{ "%.2f"|format(tcg) }}</span>
+  </a>
+  {% endif %}
+
+  {% set mp_cents = card.manapool_foil_cents if card.foil and card.manapool_foil_cents
+                    else (card.manapool_nm_cents or card.manapool_cents) %}
+  {% if mp_cents %}
+  <a class="price-chip" {% if card.manapool_url %}href="{{ card.manapool_url }}" target="_blank" rel="noopener noreferrer"{% endif %}
+     title="Mana Pool lowest listing{% if card.foil %} (foil){% endif %}">
+    <img src="/static/icons/manapool.png" alt="" width="16" height="16">
+    <span class="price-chip__site">Mana Pool</span>
+    <span class="price-chip__value">${{ "%.2f"|format(mp_cents / 100) }}</span>
+  </a>
+  {% endif %}
+
+  {% if not tcg and not mp_cents %}
+  <span class="price-chip price-chip--empty">No market price available</span>
+  {% endif %}
+</div>

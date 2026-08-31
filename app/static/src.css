@@ -1,0 +1,12 @@
+/* Tailwind input file — compiled to app/static/tailwind.css by the standalone
+   CLI (see build-css.sh). The CLI scans the template files named below and
+   emits only the utilities actually used.
+
+   Scanning files (not the live DOM) is the important part: utilities that
+   appear only inside HTMX-injected partials get compiled just the same,
+   which the browser-runtime Play CDN could not reliably do. */
+
+@import "tailwindcss";
+
+@source "../templates";
+@source "../static/scan.js";

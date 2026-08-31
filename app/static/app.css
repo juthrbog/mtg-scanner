@@ -1,0 +1,391 @@
+/* Hand-written CSS for this app's structure and for anything that appears
+   only in dynamically-injected HTML (scan results, swapped-in grids).
+
+   Why not Tailwind utilities for these: the Tailwind Play CDN compiles styles
+   in the browser at runtime. When it loads slowly or fails, every utility
+   disappears at once — grids stop being grids, max-widths stop constraining,
+   and the page collapses into a stack of full-size elements. It also misses
+   utilities that only ever appear in HTML fetched later (this is what
+   collapsed the card-art hover popup to 2x2px).
+
+   Anything load-bearing — page layout, sizing, the hover preview — is real
+   CSS here so it always applies. DaisyUI (a static stylesheet, reliably
+   cached) still handles component looks: .btn, .card, .badge, .navbar. */
+
+/* ---- Scan page layout ---- */
+.scan-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.scan-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .scan-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* The preview shows the *entire* camera frame, because the entire frame is
+   what gets uploaded now. It used to be object-fit:cover inside a card-shaped
+   box, which showed a cropped view — the preview and the capture have to
+   agree or you end up framing against information that isn't true. */
+.scan-camera {
+  position: relative;
+  width: 100%;
+  max-width: 460px;
+  aspect-ratio: 4 / 3;
+  background: #000;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scan-camera video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* A centred card-shaped hint. Placement no longer has to be exact — the
+   server finds the card anywhere in frame — so this is guidance, not a
+   boundary. */
+.scan-camera__guide {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  height: 82%;
+  aspect-ratio: 63 / 88;
+  border: 2px dashed rgba(255, 255, 255, 0.45);
+  border-radius: 0.5rem;
+  pointer-events: none;
+}
+
+/* Live detection outline, drawn over the video by detect-live.js. */
+.scan-camera__overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.auto-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.auto-toggle input { cursor: pointer; }
+
+.scan-status[data-state="armed"] { opacity: 1; color: #eab308; }
+.scan-status[data-state="armed"] .scan-status__dot { opacity: 1; animation: pulse 0.5s ease-in-out infinite; }
+
+.scan-status {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+  margin-top: 0.5rem;
+  max-width: 460px;
+  opacity: 0.75;
+}
+
+.scan-status__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex: none;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+.scan-status[data-state="searching"] .scan-status__dot { animation: pulse 1.4s ease-in-out infinite; }
+.scan-status[data-state="locked"] { opacity: 1; color: #22c55e; }
+.scan-status[data-state="locked"] .scan-status__dot { opacity: 1; }
+.scan-status[data-state="unsupported"] { opacity: 0.5; }
+
+@keyframes pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.8; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-status__dot { animation: none !important; }
+}
+
+.scan-results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 340px;
+}
+
+.scan-capture-preview {
+  width: 6rem;
+  border-radius: 0.5rem;
+  align-self: center;
+}
+
+/* ---- Collection grid ---- */
+.collection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 1rem;
+}
+
+.collection-grid__empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 4rem 1rem;
+  opacity: 0.6;
+}
+
+/* ---- Card detail modal ---- */
+.card-detail {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+}
+
+.card-detail__art {
+  width: 12rem;
+  flex: none;
+  border-radius: 0.75rem;
+  display: block;
+}
+
+.card-detail__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.card-detail__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.card-detail__oracle { white-space: pre-line; }
+
+.card-detail__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(128, 128, 128, 0.25);
+}
+
+.card-detail__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.card-detail__field > span { font-size: 0.75rem; opacity: 0.7; }
+
+@media (max-width: 640px) {
+  .card-detail { flex-direction: column; }
+  .card-detail__art { width: 100%; max-width: 14rem; align-self: center; }
+}
+
+/* ---- Market prices ---- */
+.price-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.25rem 0;
+}
+
+.price-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 0.5rem;
+  font-size: 0.8rem;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+a.price-chip:hover {
+  border-color: rgba(128, 128, 128, 0.65);
+  background: rgba(128, 128, 128, 0.1);
+}
+
+.price-chip img { border-radius: 3px; flex: none; }
+.price-chip__site { opacity: 0.75; }
+.price-chip__value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.price-chip--empty { opacity: 0.55; font-style: italic; }
+
+/* ---- Mana symbols (Mana font) ---- */
+/* Costs read as a run of pips, so give them a little air from each other and
+   from the surrounding text without inheriting the paragraph's line spacing. */
+.card-detail__oracle .ms,
+.card-detail__body .ms { vertical-align: baseline; margin: 0 0.05em; }
+
+.card-detail__oracle { line-height: 1.65; }
+
+/* ---- Set symbols (Keyrune) ---- */
+.set-symbol { font-size: 1.35rem; line-height: 1; }
+
+.set-symbol-fallback {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid currentColor;
+  border-radius: 0.25rem;
+  opacity: 0.75;
+}
+
+/* ---- Card art hover preview ----
+   A single popup element on <body>, positioned by preview.js. Any image with
+   a data-preview-src attribute triggers it. */
+.hover-preview {
+  position: fixed;
+  z-index: 200;
+  pointer-events: none;
+}
+
+.hover-preview[hidden] { display: none; }
+
+.hover-preview img {
+  display: block;
+  width: 22rem;
+  max-width: none;
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.5);
+}
+
+@media (max-width: 640px) {
+  .hover-preview img { width: 13rem; }
+}
+
+/* Thumbnails that opt into the preview */
+[data-preview-src] { cursor: zoom-in; }
+
+.card-thumb {
+  display: block;
+  width: 2.5rem;
+  border-radius: 0.25rem;
+  flex: none;
+}
+
+/* ---- Header collection totals ---- */
+.totals {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.totals__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 0.5rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.totals__chip img { border-radius: 3px; flex: none; }
+.totals__value { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Shown only when a marketplace lacks prices for some copies, so a partial
+   total is never mistaken for a complete one. */
+.totals__partial { font-size: 0.7rem; opacity: 0.6; font-variant-numeric: tabular-nums; }
+
+.totals__count { font-size: 0.78rem; opacity: 0.6; white-space: nowrap; }
+
+@media (max-width: 860px) {
+  .totals__count, .totals__partial { display: none; }
+}
+@media (max-width: 640px) {
+  .totals { display: none; }
+}
+
+/* ---- Grid card: mana cost + colour combo ---- */
+/* Cost and combo each get their own dedicated row below the name. Sharing a
+   wrapping row made the badge's position depend on how long the mana cost
+   happened to be, so it sat inline on some cards and wrapped on others. */
+.grid-card__cost {
+  font-size: 0.66rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.grid-card__combo {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.combo-detail {
+  font-size: 0.66rem;
+  opacity: 0.6;
+  white-space: nowrap;
+}
+.grid-card__cost .ms { margin-left: 0.05em; }
+
+.combo-badge {
+  display: inline-block;
+  width: fit-content;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  opacity: 0.85;
+  white-space: nowrap;
+}
+
+.combo-badge--lg {
+  font-size: 0.8rem;
+  padding: 0.15rem 0.55rem;
+  margin-right: 0.35rem;
+}
+
+/* Raw Hamming distance beside the confidence score. Kept visible because a
+   percentage alone can't tell you whether a bad scan was a poor crop or a
+   genuinely ambiguous card — the number can. */
+.match-distance {
+  font-size: 0.62rem;
+  opacity: 0.65;
+  margin-left: 0.3rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ocr-read {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  text-align: center;
+  margin: 0;
+}

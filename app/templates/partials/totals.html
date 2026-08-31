@@ -1,0 +1,21 @@
+{# Rendered into the header, and re-sent with hx-swap-oob whenever the
+   collection changes so the figures never go stale after an add or remove. #}
+<div id="collection-totals" class="totals" {% if oob %}hx-swap-oob="true"{% endif %}>
+  {% if totals.copies %}
+  <span class="totals__chip" title="{{ totals.tcg_priced }} of {{ totals.copies }} copies have a TCGplayer price">
+    <img src="/static/icons/tcgplayer.png" alt="" width="14" height="14">
+    <span class="totals__value">${{ "%.2f"|format(totals.tcg_total) }}</span>
+    {% if totals.tcg_priced < totals.copies %}
+    <span class="totals__partial">{{ totals.tcg_priced }}/{{ totals.copies }}</span>
+    {% endif %}
+  </span>
+  <span class="totals__chip" title="{{ totals.mp_priced }} of {{ totals.copies }} copies have a Mana Pool price">
+    <img src="/static/icons/manapool.png" alt="" width="14" height="14">
+    <span class="totals__value">${{ "%.2f"|format(totals.mp_total) }}</span>
+    {% if totals.mp_priced < totals.copies %}
+    <span class="totals__partial">{{ totals.mp_priced }}/{{ totals.copies }}</span>
+    {% endif %}
+  </span>
+  <span class="totals__count">{{ totals.copies }} card{{ "s" if totals.copies != 1 }}</span>
+  {% endif %}
+</div>

@@ -1,0 +1,54 @@
+{% if scan_image %}
+<img src="{{ scan_image }}" alt="What was just captured" class="scan-capture-preview shadow-md"
+     data-preview-src="{{ scan_image }}" tabindex="0">
+{% endif %}
+
+{% if ocr_title %}
+<p class="ocr-read" title="Read from the card's name bar and used to re-rank the matches below">
+  Name read: <strong>{{ ocr_title }}</strong>
+</p>
+{% endif %}
+
+{% if not candidates %}
+<div role="alert" class="alert alert-warning">
+  <span>No confident match found. Try better lighting or a straighter angle, then capture again.</span>
+</div>
+{% else %}
+  {% if low_confidence %}
+  <div role="alert" class="alert alert-warning text-sm">
+    <span>Best match is a weak one — double check before confirming.</span>
+  </div>
+  {% endif %}
+
+  {% for cand in candidates %}
+  <div class="card bg-base-100 shadow-sm">
+    <div class="card-body p-3 gap-2">
+      <div class="flex items-center gap-2 min-w-0">
+        <img class="card-thumb" src="{{ cand.card.image_small }}" alt="{{ cand.card.name }}"
+             data-preview-src="{{ cand.card.image_normal }}" tabindex="0">
+        <div class="min-w-0">
+          <p class="font-semibold text-sm truncate">{{ cand.card.name }}</p>
+          <p class="text-xs text-base-content/60 truncate flex items-center gap-1">
+            {% if cand.card.set_code|lower in keyrune_sets %}
+            <i class="ss ss-{{ cand.card.set_code|lower }} ss-{{ cand.card.rarity }}"
+               title="{{ cand.card.set_name }}"></i>
+            {% endif %}
+            <span class="truncate">{{ cand.card.set_name }} · #{{ cand.card.collector_number }}</span>
+          </p>
+        </div>
+      </div>
+      <div class="flex items-center justify-between gap-2">
+        <span class="badge badge-sm {% if cand.verdict == 'Strong' %}badge-success{% elif cand.verdict == 'Good' %}badge-success{% elif cand.verdict == 'Weak' %}badge-warning{% else %}badge-ghost{% endif %}"
+              title="Hamming distance {{ cand.distance }} of 256 bits. A real photo of the right card usually lands near 50; unrelated cards sit around 70.">
+          {{ cand.verdict }}{% if cand.ocr_agrees %} <span title="The printed name matches this card">&#10003; name</span>{% endif %}
+          <span class="match-distance">{{ cand.confidence }}% · d{{ cand.distance }}</span>
+        </span>
+        <form hx-post="/scan/confirm" hx-target="#scan-result">
+          <input type="hidden" name="scryfall_id" value="{{ cand.card.id }}">
+          <button class="btn btn-primary btn-xs">Confirm</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+{% endif %}

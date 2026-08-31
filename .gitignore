@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+*.pyc
+# database, downloaded bulk files, scan captures, and art_cache/
+data/
+.DS_Store
+
+# Third-party assets and the Tailwind CLI — re-fetch with ./fetch-assets.sh
+bin/
+app/static/daisyui.css
+app/static/keyrune.css
+app/static/mana.css
+app/static/icons/
+app/static/htmx.min.js
+app/static/opencv.js
+app/static/fonts/
+
+# Compiled by ./build-css.sh from app/static/src.css
+app/static/tailwind.css

@@ -1,0 +1,45 @@
+{% if not cards %}
+  <div class="collection-grid__empty">
+    No cards match yet. <a href="/scan" class="link link-primary">Scan one in</a>.
+  </div>
+{% endif %}
+{% for c in cards %}
+<button class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow text-left"
+        hx-get="/collection/{{ c.entry_id }}"
+        hx-target="#modal-content"
+        hx-on::after-request="document.getElementById('card-modal').showModal()">
+  <figure class="px-3 pt-3">
+    <img src="{{ c.image_small }}" alt="{{ c.name }}" class="rounded-lg" loading="lazy"
+         data-preview-src="{{ c.image_normal }}">
+  </figure>
+  <div class="card-body p-3 gap-1">
+    <h3 class="text-sm font-semibold truncate" title="{{ c.name }}">{{ c.name }}</h3>
+
+    {% if c.mana_cost %}<div class="grid-card__cost">{{ c.mana_cost|mana }}</div>{% endif %}
+
+    {% set combo = c.colors|combo_name %}
+    {% if combo %}
+    <div class="grid-card__combo">
+      <span class="combo-badge" title="{{ c.colors|combo_full_name }}">{{ combo }}</span>
+      {% set detail = c.colors|combo_detail %}
+      {% if detail %}<span class="combo-detail">{{ detail }}</span>{% endif %}
+    </div>
+    {% endif %}
+
+    <div class="flex items-center justify-between text-xs text-base-content/60">
+      <span class="flex items-center gap-1">
+        {% if c.set_code|lower in keyrune_sets %}
+        <i class="ss ss-{{ c.set_code|lower }} ss-{{ c.rarity }}" title="{{ c.set_name }}"></i>
+        {% endif %}
+        <span class="uppercase">{{ c.set_code }}</span>
+      </span>
+      <span class="badge badge-sm">×{{ c.quantity }}</span>
+    </div>
+    {% if c.foil %}<span class="badge badge-secondary badge-sm w-fit">Foil</span>{% endif %}
+  </div>
+</button>
+{% endfor %}
+
+{# When this grid is the response to an add/remove, piggyback the refreshed
+   header totals as an out-of-band swap so they never go stale. #}
+{% if oob %}{% include "partials/totals.html" %}{% endif %}

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Scan · MTG Scanner{% endblock %}
+{% block content %}
+{% if index_size == 0 %}
+<div role="alert" class="alert alert-warning" style="margin-bottom:1rem">
+  <span>The match index is empty. Run <code>python -m app.scryfall.sync</code> then
+    <code>python -m app.scryfall.hashing</code>, then reload this page.</span>
+</div>
+{% endif %}
+
+<div class="scan-toolbar">
+  <button id="capture-btn" class="btn btn-primary" disabled>
+    Capture <kbd class="kbd kbd-sm">Enter</kbd>
+  </button>
+  <select id="camera-select" class="select select-bordered select-sm" disabled>
+    <option>Loading cameras…</option>
+  </select>
+  <label class="auto-toggle" title="Capture on its own once a card has been held steady">
+    <input type="checkbox" id="auto-capture" class="toggle toggle-sm toggle-primary">
+    <span>Auto-capture</span>
+  </label>
+  <label class="auto-toggle" title="Also match on the illustration alone. Separates cards further apart, but assumes a standard card frame.">
+    <input type="checkbox" id="use-art" class="toggle toggle-sm">
+    <span>Art matching</span>
+  </label>
+  <label class="auto-toggle" title="Read the printed name and use it to re-rank the image matches. Adds roughly a third of a second.">
+    <input type="checkbox" id="use-ocr" class="toggle toggle-sm">
+    <span>Name check</span>
+  </label>
+</div>
+
+<div class="scan-layout">
+  <div>
+    <div class="scan-camera">
+      <video id="camera" autoplay playsinline muted></video>
+      <div class="scan-camera__guide"></div>
+      <canvas id="detect-overlay" class="scan-camera__overlay"></canvas>
+    </div>
+    <p id="detect-status" class="scan-status" data-state="loading">
+      <span class="scan-status__dot"></span><span id="detect-status-text">Starting card detection…</span>
+    </p>
+  </div>
+
+  <div id="scan-result" class="scan-results"></div>
+</div>
+
+<canvas id="capture-canvas" hidden></canvas>
+<!-- OpenCV.js is ~10MB; async so it never blocks the page, and the capture
+     button works without it (the server does its own detection either way). -->
+<script src="/static/opencv.js" async></script>
+<script src="/static/detect-live.js"></script>
+<script src="/static/scan.js"></script>
+{% endblock %}
