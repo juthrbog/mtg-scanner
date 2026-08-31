@@ -12,7 +12,7 @@ from .db import init_db
 from .recognition.match import art_index, index
 from .routers import collection, scan, stats
 
-app = FastAPI(title="MTG Scanner")
+app = FastAPI(title="Weatherlight")
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.mount("/data/scans", StaticFiles(directory=str(SCAN_CACHE_DIR)), name="scans")

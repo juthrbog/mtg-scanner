@@ -26,7 +26,7 @@ from ..recognition.detect import art_window
 from ..config import DATA_DIR, PHASH_SIZE
 from ..db import db_session
 
-HEADERS = {"User-Agent": "mtg-scanner/0.1 (local personal collection tool)"}
+HEADERS = {"User-Agent": "weatherlight/0.1 (local personal collection tool)"}
 
 # Card art is cached here so a re-hash (after changing PHASH_SIZE, say) costs
 # CPU rather than another 100k downloads from Scryfall's CDN.

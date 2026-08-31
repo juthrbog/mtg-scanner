@@ -23,7 +23,7 @@ from ..config import DATA_DIR, SCRYFALL_API
 from ..db import db_session, init_db
 
 BULK_INFO_URL = f"{SCRYFALL_API}/bulk-data"
-HEADERS = {"User-Agent": "mtg-scanner/0.1 (local personal collection tool)", "Accept": "application/json"}
+HEADERS = {"User-Agent": "weatherlight/0.1 (local personal collection tool)", "Accept": "application/json"}
 
 # Layouts that aren't real, ownable printings — skip them.
 SKIP_LAYOUTS = {"art_series", "token", "double_faced_token", "emblem", "planar", "scheme", "vanguard"}

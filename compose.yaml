@@ -1,3 +1,5 @@
+name: weatherlight
+
 services:
   app:
     build: .
@@ -9,8 +11,8 @@ services:
     volumes:
       # The database, art cache and bulk downloads. Kept in a named volume so
       # rebuilding the image never costs the index or the collection.
-      - mtg-data:/app/data
+      - weatherlight-data:/app/data
     restart: unless-stopped
 
 volumes:
-  mtg-data:
+  weatherlight-data:

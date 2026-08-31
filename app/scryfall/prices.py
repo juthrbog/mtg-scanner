@@ -20,7 +20,7 @@ import httpx
 from ..db import db_session, init_db
 
 PRICES_URL = "https://manapool.com/api/v1/prices/singles"
-HEADERS = {"User-Agent": "mtg-scanner/0.1 (local personal collection tool)", "Accept": "application/json"}
+HEADERS = {"User-Agent": "weatherlight/0.1 (local personal collection tool)", "Accept": "application/json"}
 BATCH = 2000
 
 

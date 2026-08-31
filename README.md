@@ -1,4 +1,12 @@
-# MTG Scanner
+# Weatherlight
+
+> *"The ship was more than the sum of her parts."*
+
+Named for the skyship of the Weatherlight Saga, whose crew spent the story
+hunting down the scattered pieces of the Legacy — assembling a collection,
+artifact by artifact, into something greater. Which is roughly what this does
+with a shoebox of cards.
+
 
 A local app for cataloguing a Magic: The Gathering collection. Point a webcam
 at a card, confirm the match, and it's in your collection — searchable,
@@ -32,7 +40,7 @@ docker compose exec app python -m app.scryfall.prices        # optional, market 
 ```
 
 Everything it downloads — the database, card art cache and bulk files — lives
-in the `mtg-data` volume, so rebuilding the image never costs you the index or
+in the `weatherlight-data` volume, so rebuilding the image never costs you the index or
 your collection. (Verified: a `--no-cache` rebuild leaves the index, the hashes
 and the collection intact.)
 
