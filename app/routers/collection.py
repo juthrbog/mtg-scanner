@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 
 from ..db import get_db
+from ..search import describe, parse
 from ..templating import templates
 
 router = APIRouter()
@@ -55,16 +56,18 @@ def _query_collection(conn: sqlite3.Connection, q: str, color: str, rarity: str)
     sql = """
         SELECT ce.id AS entry_id, ce.quantity, ce.foil, ce.condition,
                sc.id AS scryfall_id, sc.name, sc.set_code, sc.set_name,
-               sc.rarity, sc.colors, sc.mana_cost, sc.image_small, sc.image_normal,
+               sc.rarity, sc.colors, sc.mana_cost, sc.type_line, sc.keywords,
+               sc.image_small, sc.image_normal,
                sc.price_usd, sc.price_usd_foil
         FROM collection_entry ce
         JOIN scryfall_card sc ON sc.id = ce.scryfall_id
         WHERE 1 = 1
     """
     params: list = []
-    if q:
-        sql += " AND sc.name LIKE ?"
-        params.append(f"%{q}%")
+    parsed = parse(q)
+    if parsed.sql:
+        sql += f" AND ({parsed.sql})"
+        params.extend(parsed.params)
     if color:
         sql += " AND (',' || sc.colors || ',') LIKE ?"
         params.append(f"%,{color},%")
@@ -81,6 +84,7 @@ def collection_page(request: Request, q: str = "", color: str = "", rarity: str 
     return templates.TemplateResponse(
         "collection.html",
         {"request": request, "cards": cards, "q": q, "color": color, "rarity": rarity,
+         "search_summary": describe(parse(q)),
          "totals": collection_totals(conn), "oob": False},
     )
 
@@ -88,7 +92,10 @@ def collection_page(request: Request, q: str = "", color: str = "", rarity: str 
 @router.get("/grid", response_class=HTMLResponse)
 def collection_grid(request: Request, q: str = "", color: str = "", rarity: str = "", conn=Depends(get_db)):
     cards = _query_collection(conn, q, color, rarity)
-    return templates.TemplateResponse("partials/grid.html", {"request": request, "cards": cards})
+    return templates.TemplateResponse(
+        "partials/grid.html",
+        {"request": request, "cards": cards, "search_summary": describe(parse(q))},
+    )
 
 
 @router.get("/{entry_id}", response_class=HTMLResponse)

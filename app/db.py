@@ -91,6 +91,10 @@ _MIGRATIONS = {
         # while `color_identity` is black — which is what "how much black
         # do I own" should count.
         "color_identity": "TEXT",
+        # Scryfall's structured ability list ("Flying", "Trample"),
+        # comma-joined. Searching this beats matching oracle text, which
+        # would also hit the word in flavour text or a reminder note.
+        "keywords": "TEXT",
     },
 }
 

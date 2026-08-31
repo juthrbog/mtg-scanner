@@ -1,6 +1,10 @@
 {% if not cards %}
   <div class="collection-grid__empty">
-    No cards match yet. <a href="/scan" class="link link-primary">Scan one in</a>.
+    {% if search_summary %}
+      Nothing matches — {{ search_summary }}.
+    {% else %}
+      No cards yet. <a href="/scan" class="link link-primary">Scan one in</a>.
+    {% endif %}
   </div>
 {% endif %}
 {% for c in cards %}

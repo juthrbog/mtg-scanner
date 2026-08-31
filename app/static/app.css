@@ -487,3 +487,32 @@ a.price-chip:hover {
 @media (max-width: 640px) {
   .breakdown__bar-col { display: none; }
 }
+
+/* ---- Search help ---- */
+.search-help { font-size: 0.8rem; }
+.search-help summary {
+  cursor: pointer;
+  opacity: 0.6;
+  width: fit-content;
+  padding: 0.15rem 0;
+}
+.search-help summary:hover { opacity: 0.9; }
+
+.search-help__body {
+  margin-top: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 0.5rem;
+  background: rgba(128, 128, 128, 0.05);
+  max-width: 62ch;
+  line-height: 1.55;
+}
+.search-help__body p { margin: 0 0 0.5rem; }
+.search-help__body ul { margin: 0 0 0.5rem; padding-left: 1.1rem; }
+.search-help__body li { margin-bottom: 0.2rem; }
+.search-help__body code {
+  font-size: 0.9em;
+  padding: 0.05em 0.3em;
+  border-radius: 3px;
+  background: rgba(128, 128, 128, 0.18);
+}

@@ -139,6 +139,29 @@ Prices move constantly, so re-run that whenever you want current numbers.
 Roughly 84k of the 111k cards carry a Mana Pool price; cards with none simply
 show the TCGplayer chip (or "No market price available" if neither has one).
 
+## Searching the collection
+
+The search box uses a subset of Scryfall's syntax, because anyone with a Magic
+collection already types that. A bare word matches **name, type, set and
+keywords**; prefixes narrow it to one field:
+
+| Query | Finds |
+|---|---|
+| `dragon` | name, type, set or keyword containing "dragon" |
+| `t:creature` | type line |
+| `s:mbs` | set name or code |
+| `kw:flying` | abilities, from Scryfall's structured keyword list |
+| `o:destroy` | rules text |
+| `"exact phrase"` | the phrase, kept together |
+| `t:creature -kw:flying` | creatures that don't fly |
+
+Every term must match, so terms narrow rather than widen. Keywords come from
+Scryfall's `keywords` field rather than a text search of the rules box —
+searching oracle text for "flying" also hits flavour text and reminder text.
+Rules text is deliberately kept out of the bare-word search for the same
+reason: common words like "creature" would match almost everything. Populate
+`keywords` by re-running `sync.py` (no re-download needed).
+
 ## Stats
 
 `/stats` summarises the collection: total cards, unique printings, distinct

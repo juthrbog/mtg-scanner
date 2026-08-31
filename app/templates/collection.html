@@ -4,8 +4,10 @@
 <div class="flex flex-col gap-4">
   <div class="flex flex-wrap gap-3 items-center">
     <input type="search" name="q" value="{{ q }}"
-           placeholder="Search your collection..."
-           class="input input-bordered w-full max-w-xs"
+           placeholder="Name, type, set, keyword…"
+           title="Bare words search name, type, set and keywords. Narrow with t: type, s: set, kw: keyword, o: rules text. Quote phrases, prefix with - to exclude."
+           class="input input-bordered w-full max-w-sm"
+           autocomplete="off" spellcheck="false"
            hx-get="/collection/grid" hx-trigger="keyup changed delay:300ms" hx-target="#grid"
            hx-include="[name='color'],[name='rarity']">
 
@@ -30,6 +32,22 @@
       <option value="mythic" {% if rarity == "mythic" %}selected{% endif %}>Mythic</option>
     </select>
   </div>
+
+  <details class="search-help">
+    <summary>Search tips</summary>
+    <div class="search-help__body">
+      <p>A bare word looks in the card's <strong>name</strong>, <strong>type</strong>,
+         <strong>set</strong> and <strong>keywords</strong>. Add a prefix to search one field:</p>
+      <ul>
+        <li><code>t:creature</code> — type line, so <code>t:dragon</code> or <code>t:legendary</code></li>
+        <li><code>s:mbs</code> — set name or code</li>
+        <li><code>kw:flying</code> — abilities, from Scryfall's keyword list</li>
+        <li><code>o:draw</code> — rules text (kept out of bare search; it matches almost everything)</li>
+      </ul>
+      <p>Combine freely — every term must match. <code>"exact phrase"</code> in quotes,
+         and <code>-</code> excludes: <code>t:creature kw:flying -kw:defender</code>.</p>
+    </div>
+  </details>
 
   <div id="grid" class="collection-grid">
     {% include "partials/grid.html" %}
