@@ -89,6 +89,11 @@ class DeckReport:
     problems: List[Problem] = field(default_factory=list)
     owned: int = 0
     missing: int = 0
+    # Scryfall ids of the cards outside the commander's identity. The identity
+    # problem names them for the summary; this lets the deck list mark the rows
+    # themselves, so a hundred-card list doesn't have to be cross-referenced
+    # against a sentence to find the offenders.
+    off_identity: set = field(default_factory=set)
 
     @property
     def legal(self) -> bool:
@@ -105,7 +110,8 @@ def validate(commander, partner, cards: Iterable,
     """Check a deck against the format.
 
     `cards` are the non-commander rows, each needing name, type_line,
-    oracle_text, color_identity/colors, commander_legal, oracle_id and quantity.
+    oracle_text, color_identity/colors, commander_legal, scryfall_id, oracle_id
+    and quantity.
 
     `owned_counts` maps oracle_id to how many copies the collection holds. A
     deck built from the collection can drift out of step with it — a card gets
@@ -160,14 +166,13 @@ def validate(commander, partner, cards: Iterable,
         ))
 
     if leaders:
-        outside = sorted({
-            c["name"] for c in cards if not identity_of(c) <= report.identity
-        })
-        if outside:
+        offenders = [c for c in cards if not identity_of(c) <= report.identity]
+        report.off_identity = {c["scryfall_id"] for c in offenders}
+        if offenders:
             report.problems.append(Problem(
                 "identity",
                 "Outside the commander's colour identity.",
-                outside,
+                sorted({c["name"] for c in offenders}),
             ))
 
     banned = sorted({

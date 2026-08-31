@@ -214,6 +214,11 @@ flagged in the search results and named in the validation panel. Building a
 deck you know is illegal is a normal step, and a button that silently refuses
 teaches nothing.
 
+Off-identity cards also carry the panel's warning colour on their own row in
+the deck list. The panel names them, but finding those names again in a hundred
+rows is the tedious part — especially after an import, where a list built for
+someone else's commander can bring in a dozen at once.
+
 Each deck also shows a mana curve over non-lands and cards grouped by type.
 
 Deck rules live in `app/deck.py` as plain functions over card rows, so they can
@@ -248,6 +253,49 @@ line.
 
 Rendering lives in `app/export.py`, separate from the route, so adding a format
 means adding a branch and a `FORMATS` entry.
+
+### Importing a deck list
+
+**Import list** on `/decks` takes a pasted list or a `.txt`/`.csv` file. There
+is no format to pick: a list that is *written* has one shape, but a list that
+*arrives* has been through whichever site it was copied from, so the parser
+reads the union of what they all emit —
+
+- `1 Sol Ring`, `1x Sol Ring`, or a bare `Sol Ring` (hand-written lists drop
+  the count on singletons)
+- `1 Sol Ring (ECC) 57` — Arena and Moxfield's with-printing export
+- section headers (`Commander`, `Deck`, `Sideboard`) and the type headers
+  (`Creatures (30)`) TappedOut and Archidekt insert
+- `SB:` line prefixes from MTGO's `.dec`
+- trailing `*F*` (Moxfield foil) and `[Category]` (Archidekt) tags
+- `//` and `#` comments, and the CSV this app exports
+
+Names are matched loosely enough to survive the trip: accents, curly quotes and
+stray whitespace are folded away, and a double-faced card matches on either its
+front face or its full name — so an Arena list saying `Obyra's Attendants` finds
+`Obyra's Attendants // Desperate Parry`.
+
+Because decks here are built from cards you own, importing **matches against the
+collection**, and the preview says exactly what will happen before anything is
+saved:
+
+| | |
+| --- | --- |
+| **short on copies** | the list wants 4, you own 1 — 1 is imported |
+| **not in your collection** | a real card you don't own — listed, not added |
+| **unrecognised** | no card by that name — usually a typo |
+| **sideboard** | Commander has no sideboard, so those lines are skipped |
+
+That last distinction is the one worth having: *you don't own this* and *no such
+card* ask you for completely different things — go scan it in, versus check the
+spelling.
+
+The commander comes from a `Commander` section when the list has one, and
+otherwise from a picker of every legendary creature in the list. Preview and
+create run the *same* resolver, so what you are shown is what gets built.
+
+Parsing lives in `app/deck_import.py` and never touches the database, so it can
+be exercised on a string; turning a name into a card you own is the router's job.
 
 ---
 
@@ -314,6 +362,7 @@ app/
   mana.py               renders Scryfall {R} tokens as Mana font symbols
   deck.py               Commander rules as plain functions over card rows
   export.py             renders a deck as text other Magic tools can import
+  deck_import.py        reads a pasted deck list back, in whatever shape it came
   templating.py         shared Jinja environment, filters and globals
   scryfall/
     sync.py             bulk metadata download → scryfall_card

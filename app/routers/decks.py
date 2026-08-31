@@ -8,7 +8,9 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 
 from ..db import get_db
-from ..deck import DECK_SIZE, categorise, curve, identity_of, validate
+from ..deck import DECK_SIZE, can_be_commander, categorise, curve, identity_of, validate
+from ..deck_import import COMMANDER, SIDEBOARD, fold, front_face
+from ..deck_import import parse as parse_list
 from ..export import FORMATS, render
 from ..search import parse
 from ..templating import templates
@@ -198,6 +200,194 @@ def create_deck(name: str = Form(...), commander_id: str = Form(...), conn=Depen
         (name.strip() or commander["name"], commander_id),
     )
     return RedirectResponse(url=f"/decks/{cur.lastrowid}", status_code=303)
+
+
+# ---------------------------------------------------------------- importing
+
+def _owned_index(conn: sqlite3.Connection) -> tuple:
+    """Every owned printing, keyed by the names a deck list might call it.
+
+    Two keys per printing — the full name and the front face — so a list from
+    Arena ("Obyra's Attendants") and one from Moxfield ("Obyra's Attendants //
+    Desperate Parry") both land on the same card.
+
+    Ordered by collection_entry id so the last candidate for a name is the most
+    recently added printing, which is the same tie-break the deck search uses.
+    """
+    by_name: dict = {}
+    owned: dict = {}
+    for row in conn.execute(
+        f"""SELECT {CARD_FIELDS}, ce.quantity AS entry_qty
+            {OWNED_SOURCE} ORDER BY ce.id"""
+    ):
+        owned[row["oracle_id"]] = owned.get(row["oracle_id"], 0) + row["entry_qty"]
+        for key in {fold(row["name"]), fold(front_face(row["name"]))}:
+            by_name.setdefault(key, []).append(row)
+    return by_name, owned
+
+
+def _pick_printing(candidates: list, set_code: Optional[str],
+                   collector: Optional[str]) -> sqlite3.Row:
+    """The copy to use for a list line.
+
+    A list that names a printing is asking for that printing, so honour it when
+    the collection holds it — that is the whole point of exporting with set and
+    collector number. Otherwise fall back to the most recently added copy.
+    """
+    if set_code:
+        code = set_code.lower()
+        exact = [c for c in candidates if (c["set_code"] or "").lower() == code]
+        if collector:
+            numbered = [c for c in exact
+                        if (c["collector_number"] or "").lstrip("0") == collector.lstrip("0")]
+            if numbered:
+                return numbered[-1]
+        if exact:
+            return exact[-1]
+    return candidates[-1]
+
+
+def _known_to_scryfall(conn: sqlite3.Connection, names: List[str]) -> set:
+    """Which of these names exist as cards at all.
+
+    The distinction matters more than it looks: "you don't own this" and "no
+    such card" ask the user for completely different things — go scan it in,
+    versus check the spelling.
+    """
+    if not names:
+        return set()
+    lowered = [n.lower() for n in names]
+    found = {
+        fold(r["name"])
+        for r in conn.execute(
+            f"SELECT name FROM scryfall_card WHERE LOWER(name) IN "
+            f"({','.join('?' * len(lowered))})",
+            lowered,
+        )
+    }
+    # Anything still missing may be a double-faced card given by its front face,
+    # which no equality test will find. Few enough by now to check one at a time.
+    for name in names:
+        if fold(name) in found:
+            continue
+        hit = conn.execute(
+            "SELECT 1 FROM scryfall_card WHERE LOWER(name) LIKE LOWER(?) LIMIT 1",
+            (f"{name} //%",),
+        ).fetchone()
+        if hit:
+            found.add(fold(name))
+    return found
+
+
+def _resolve_import(conn: sqlite3.Connection, text: str) -> dict:
+    """Match a pasted list against the collection.
+
+    Nothing is written here. The same function backs both the preview and the
+    create, so what the user is shown is exactly what gets built — rather than
+    a preview that re-derives the answer a second, subtly different way.
+    """
+    parsed = parse_list(text)
+    by_name, owned = _owned_index(conn)
+
+    rows: List[dict] = []
+    unresolved: List[str] = []
+    # Copies already spoken for, by oracle id. Clamping each line against the
+    # full owned count independently would let a list that spreads a card over
+    # several lines — "1 Forest" three times, which hand-written lists do —
+    # claim three copies of the one Forest in the collection.
+    used: dict = {}
+    for line in parsed.lines:
+        candidates = by_name.get(fold(line.name)) or by_name.get(fold(front_face(line.name)))
+        if not candidates:
+            unresolved.append(line.name)
+            rows.append({"line": line, "card": None, "quantity": 0,
+                         "owned": 0, "status": "missing"})
+            continue
+        card = _pick_printing(candidates, line.set_code, line.collector_number)
+        have = owned.get(card["oracle_id"], 0)
+        if line.section == SIDEBOARD:
+            status = "sideboard"
+            quantity = 0
+        else:
+            # Clamped rather than added and flagged: a deck in this app can
+            # never ask for more copies than the collection holds, and an
+            # import is not the place to break that.
+            quantity = max(0, min(line.quantity, have - used.get(card["oracle_id"], 0)))
+            used[card["oracle_id"]] = used.get(card["oracle_id"], 0) + quantity
+            status = "ok" if quantity == line.quantity else "clamped"
+        rows.append({"line": line, "card": card, "quantity": quantity,
+                     "owned": have, "status": status})
+
+    known = _known_to_scryfall(conn, unresolved)
+    for row in rows:
+        if row["status"] == "missing":
+            row["status"] = "unowned" if fold(row["line"].name) in known else "unknown"
+
+    # Anything that could lead the deck. A list with a Commander section says
+    # so outright; without one, the user picks from whatever qualifies.
+    named = [r for r in rows if r["card"] and r["line"].section == COMMANDER]
+    candidates = [r for r in rows if r["card"] and can_be_commander(r["card"])]
+    suggested = named[0]["card"]["scryfall_id"] if named else (
+        candidates[0]["card"]["scryfall_id"] if len(candidates) == 1 else None)
+
+    return {
+        "rows": rows,
+        "unreadable": parsed.unreadable,
+        "commander_candidates": candidates,
+        "suggested_commander_id": suggested,
+        "counts": {
+            "ok": sum(1 for r in rows if r["status"] == "ok"),
+            "clamped": sum(1 for r in rows if r["status"] == "clamped"),
+            "unowned": sum(1 for r in rows if r["status"] == "unowned"),
+            "unknown": sum(1 for r in rows if r["status"] == "unknown"),
+            "sideboard": sum(1 for r in rows if r["status"] == "sideboard"),
+        },
+        "total_cards": sum(r["quantity"] for r in rows),
+    }
+
+
+@router.get("/import", response_class=HTMLResponse)
+def import_form(request: Request, conn=Depends(get_db)):
+    return templates.TemplateResponse(
+        request, "deck_import.html",
+        {"totals": collection_totals(conn), "oob": False},
+    )
+
+
+@router.post("/import/preview", response_class=HTMLResponse)
+def import_preview(request: Request, text: str = Form(""), conn=Depends(get_db)):
+    result = _resolve_import(conn, text) if text.strip() else None
+    return templates.TemplateResponse(
+        request, "partials/import_preview.html", {"result": result},
+    )
+
+
+@router.post("/import")
+def import_deck(name: str = Form(""), text: str = Form(""),
+                commander_id: str = Form(""), conn=Depends(get_db)):
+    commander = _card(conn, commander_id) if commander_id else None
+    if commander is None:
+        raise HTTPException(status_code=400, detail="Pick a commander for the imported deck")
+
+    result = _resolve_import(conn, text)
+    cur = conn.execute(
+        "INSERT INTO deck (name, commander_id) VALUES (?, ?)",
+        (name.strip() or commander["name"], commander_id),
+    )
+    deck_id = cur.lastrowid
+
+    # The commander lives on the deck row, so drop it from the list — a list
+    # that names it in both a Commander section and the deck body (some sites
+    # export it twice) would otherwise put it in the 99 as well.
+    for row in result["rows"]:
+        if not row["quantity"] or row["card"]["oracle_id"] == commander["oracle_id"]:
+            continue
+        conn.execute(
+            """INSERT INTO deck_card (deck_id, scryfall_id, quantity) VALUES (?, ?, ?)
+               ON CONFLICT(deck_id, scryfall_id) DO UPDATE SET quantity = quantity + excluded.quantity""",
+            (deck_id, row["card"]["scryfall_id"], row["quantity"]),
+        )
+    return RedirectResponse(url=f"/decks/{deck_id}", status_code=303)
 
 
 @router.get("/{deck_id}", response_class=HTMLResponse)

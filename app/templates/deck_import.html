@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Import a deck · Weatherlight{% endblock %}
+{% block content %}
+<div class="deck-header">
+  <div class="deck-title">
+    <a href="/decks/" class="deck-back">← Decks</a>
+    <h1 class="page-title">Import a deck list</h1>
+  </div>
+</div>
+
+<p class="page-note">
+  Paste a list from Moxfield, Archidekt, TappedOut, Arena or anywhere else, or
+  load a <code>.txt</code>/<code>.csv</code> file. Cards are matched against
+  your collection — anything you don't own is listed rather than added, so the
+  deck still only contains cards you can actually sleeve.
+</p>
+
+<form method="post" action="/decks/import" class="import-form">
+  <div class="import-fields">
+    <label class="import-field">
+      <span class="import-field__label">Deck name</span>
+      <input type="text" name="name" autocomplete="off"
+             placeholder="Leave blank to use the commander's name"
+             class="input input-bordered w-full">
+    </label>
+    <label class="import-field import-field--file">
+      <span class="import-field__label">Or load a file</span>
+      <input type="file" id="import-file" accept=".txt,.csv,.dec,text/plain"
+             class="file-input file-input-bordered file-input-sm w-full">
+    </label>
+  </div>
+
+  <textarea name="text" id="import-text" class="import-text" spellcheck="false"
+            placeholder="1 Sol Ring&#10;1 Command Tower&#10;3 Forest&#10;&#10;Commander&#10;1 Atraxa, Praetors' Voice"
+            hx-post="/decks/import/preview" hx-trigger="input delay:400ms"
+            hx-target="#import-preview" aria-label="Deck list"></textarea>
+
+  <div id="import-preview"></div>
+</form>
+
+<script>
+  (() => {
+    const file = document.getElementById("import-file");
+    const text = document.getElementById("import-text");
+    const form = text.closest("form");
+
+    // The commander picker only exists once a preview has run, so submitting
+    // before then — pressing Enter in the name field, say — would post without
+    // one and land on a bare 400. Hold the submit until there's something to
+    // build instead.
+    form.addEventListener("submit", (e) => {
+      if (!form.querySelector("[name=commander_id]")) {
+        e.preventDefault();
+        text.focus();
+      }
+    });
+
+    // Read the file into the textarea rather than uploading it, so the file
+    // and the paste path go through exactly one parser on the server.
+    file.addEventListener("change", async () => {
+      if (!file.files.length) return;
+      text.value = await file.files[0].text();
+      // Assigning value doesn't fire `input`, so the preview would sit stale.
+      text.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  })();
+</script>
+{% endblock %}

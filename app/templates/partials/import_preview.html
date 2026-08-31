@@ -1,0 +1,74 @@
+{# What the import would build. Re-rendered as the list is edited, and driven
+   by the same resolver the create uses, so nothing shown here can drift from
+   what actually gets saved. #}
+{% if not result %}
+  <p class="import-empty">Paste a list above to see what it would build.</p>
+{% else %}
+{% set c = result.counts %}
+
+<div class="import-summary">
+  <span class="import-summary__total">
+    {{ result.total_cards }}<span class="import-summary__of"> card{{ 's' if result.total_cards != 1 }} matched</span>
+  </span>
+  {% if c.clamped %}<span class="import-chip import-chip--warn">{{ c.clamped }} short on copies</span>{% endif %}
+  {% if c.unowned %}<span class="import-chip import-chip--warn">{{ c.unowned }} not in your collection</span>{% endif %}
+  {% if c.unknown %}<span class="import-chip import-chip--bad">{{ c.unknown }} unrecognised</span>{% endif %}
+  {% if c.sideboard %}<span class="import-chip">{{ c.sideboard }} sideboard, skipped</span>{% endif %}
+</div>
+
+<div class="import-commander">
+  {% if result.commander_candidates %}
+  <label class="import-field__label" for="import-commander">Commander</label>
+  <select name="commander_id" id="import-commander" class="select select-bordered select-sm">
+    {% for cand in result.commander_candidates %}
+    <option value="{{ cand.card.scryfall_id }}"
+            {% if cand.card.scryfall_id == result.suggested_commander_id %}selected{% endif %}>
+      {{ cand.card.name }}
+    </option>
+    {% endfor %}
+  </select>
+  <button class="btn btn-primary btn-sm">Create deck</button>
+  {% else %}
+  <p class="import-blocked">
+    Nothing in this list can be a commander. A Commander deck needs a legendary
+    creature you own — add one to the list, or
+    <a href="/decks/new" class="link link-primary">start the deck from a commander</a> instead.
+  </p>
+  {% endif %}
+</div>
+
+{% if result.unreadable %}
+<div class="import-note">
+  Couldn't read {{ result.unreadable|length }} line{{ 's' if result.unreadable|length != 1 }}:
+  <span class="import-note__lines">{{ result.unreadable|join(' · ') }}</span>
+</div>
+{% endif %}
+
+<ul class="import-rows">
+  {% for row in result.rows %}
+  <li class="import-row import-row--{{ row.status }}">
+    {% if row.card %}
+    <img class="import-row__thumb" src="{{ row.card.image_small }}" alt=""
+         data-preview-src="{{ row.card.image_normal }}" loading="lazy">
+    {% else %}
+    <span class="import-row__thumb import-row__thumb--none"></span>
+    {% endif %}
+
+    <span class="import-row__qty">{{ row.line.quantity }}×</span>
+    <span class="import-row__name">{{ row.card.name if row.card else row.line.name }}</span>
+
+    {% if row.status == 'clamped' %}
+      <span class="import-row__why">only {{ row.owned }} owned — importing {{ row.quantity }}</span>
+    {% elif row.status == 'unowned' %}
+      <span class="import-row__why">not in your collection</span>
+    {% elif row.status == 'unknown' %}
+      <span class="import-row__why">no card by that name</span>
+    {% elif row.status == 'sideboard' %}
+      <span class="import-row__why">sideboard</span>
+    {% elif row.card.set_code %}
+      <span class="import-row__set">{{ row.card.set_code|upper }}</span>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

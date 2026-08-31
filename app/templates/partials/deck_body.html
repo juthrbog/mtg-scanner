@@ -58,12 +58,18 @@
   <ul class="deck-list">
     {% for c in group.cards %}
     {% set have = owned_counts.get(c.oracle_id, 0) %}
-    <li class="deck-row {% if c.quantity > have %}deck-row--missing{% endif %}">
+    {% set off_identity = c.scryfall_id in report.off_identity %}
+    <li class="deck-row {% if c.quantity > have %}deck-row--missing{% endif %}
+               {% if off_identity %}deck-row--off-identity{% endif %}"
+        {% if off_identity %}title="Outside {{ commander.name }}'s colour identity"{% endif %}>
       <span class="deck-row__qty">{{ c.quantity }}×</span>
       <img class="deck-row__thumb" src="{{ c.image_small }}" alt=""
            data-preview-src="{{ c.image_normal }}" loading="lazy">
       <span class="deck-row__name">{{ c.name }}</span>
       <span class="deck-row__cost">{{ c.mana_cost|mana }}</span>
+      {% if off_identity %}
+      <span class="deck-row__flag">off-colour</span>
+      {% endif %}
       {% if c.quantity > have %}
       <span class="deck-row__flag" title="Your collection holds {{ have }}">only {{ have }} owned</span>
       {% endif %}

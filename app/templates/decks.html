@@ -3,12 +3,16 @@
 {% block content %}
 <div class="deck-header">
   <h1 class="page-title">Commander decks</h1>
-  <a href="/decks/new" class="btn btn-primary btn-sm">New deck</a>
+  <div class="deck-actions">
+    <a href="/decks/import" class="btn btn-sm">Import list</a>
+    <a href="/decks/new" class="btn btn-primary btn-sm">New deck</a>
+  </div>
 </div>
 
 {% if not decks %}
   <div class="collection-grid__empty">
-    No decks yet. <a href="/decks/new" class="link link-primary">Pick a commander</a> to start one.
+    No decks yet. <a href="/decks/new" class="link link-primary">Pick a commander</a>
+    to start one, or <a href="/decks/import" class="link link-primary">import a list</a>.
   </div>
 {% else %}
 <div class="deck-grid">
