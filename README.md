@@ -113,6 +113,7 @@ app/
   routers/
     collection.py       browse / search / edit / delete
     scan.py               capture → match → confirm
+    stats.py              collection totals, value, breakdown by colour
   templates/            Jinja2 + HTMX; Tailwind and DaisyUI loaded from CDN, no build step
   static/scan.js         the one hand-written bit of client JS (camera capture)
 data/                    gitignored — mtg.db, downloaded bulk files, scan captures
@@ -137,6 +138,21 @@ python -m app.scryfall.prices
 Prices move constantly, so re-run that whenever you want current numbers.
 Roughly 84k of the 111k cards carry a Mana Pool price; cards with none simply
 show the TCGplayer chip (or "No market price available" if neither has one).
+
+## Stats
+
+`/stats` summarises the collection: total cards, unique printings, distinct
+cards (ignoring reprints), value from both marketplaces, and breakdowns by
+colour and rarity.
+
+Two things the page states rather than leaves you to infer:
+
+- **Colours count by colour identity, not mana cost.** A Swamp has no mana
+  cost, so counting by cost would file it under colourless. Identity includes
+  the mana a card produces, so basic lands land under their colour.
+- **A multicolour card counts under each of its colours**, so the colour rows
+  sum to more than the collection size. That is the useful reading of "how
+  much black do I own".
 
 ## Your collection is safe
 

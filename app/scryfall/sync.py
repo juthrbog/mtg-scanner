@@ -89,6 +89,7 @@ def _to_row(card: dict) -> tuple:
         card.get("type_line"),
         card.get("oracle_text"),
         ",".join(card.get("colors", [])),
+        ",".join(card.get("color_identity", [])),
         image_uris.get("small"),
         image_uris.get("normal"),
         float(prices["usd"]) if prices.get("usd") else None,
@@ -100,9 +101,9 @@ def _to_row(card: dict) -> tuple:
 UPSERT_SQL = """
     INSERT INTO scryfall_card (
         id, oracle_id, name, set_code, set_name, collector_number,
-        rarity, mana_cost, type_line, oracle_text, colors,
+        rarity, mana_cost, type_line, oracle_text, colors, color_identity,
         image_small, image_normal, price_usd, price_usd_foil, tcgplayer_url
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
         name=excluded.name, set_code=excluded.set_code, set_name=excluded.set_name,
         collector_number=excluded.collector_number, rarity=excluded.rarity,
@@ -110,7 +111,8 @@ UPSERT_SQL = """
         oracle_text=excluded.oracle_text, colors=excluded.colors,
         image_small=excluded.image_small, image_normal=excluded.image_normal,
         price_usd=excluded.price_usd, price_usd_foil=excluded.price_usd_foil,
-        tcgplayer_url=excluded.tcgplayer_url
+        tcgplayer_url=excluded.tcgplayer_url,
+        color_identity=excluded.color_identity
 """
 
 

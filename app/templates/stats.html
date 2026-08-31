@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Stats · MTG Scanner{% endblock %}
+{% block content %}
+
+{% if not stats.totals.copies %}
+  <div class="collection-grid__empty">
+    Nothing to summarise yet. <a href="/scan" class="link link-primary">Scan a card</a> to get started.
+  </div>
+{% else %}
+
+<div class="stat-tiles">
+  <div class="stat-tile">
+    <div class="stat-tile__label">Total cards</div>
+    <div class="stat-tile__value">{{ stats.totals.copies }}</div>
+    <div class="stat-tile__note">counting duplicates</div>
+  </div>
+  <div class="stat-tile">
+    <div class="stat-tile__label">Unique printings</div>
+    <div class="stat-tile__value">{{ stats.printings }}</div>
+    <div class="stat-tile__note">separate entries</div>
+  </div>
+  <div class="stat-tile">
+    <div class="stat-tile__label">Distinct cards</div>
+    <div class="stat-tile__value">{{ stats.distinct_cards }}</div>
+    <div class="stat-tile__note">ignoring reprints</div>
+  </div>
+  <div class="stat-tile">
+    <div class="stat-tile__label">Collection value</div>
+    <div class="stat-tile__value">
+      <span class="stat-tile__money">
+        <img src="/static/icons/tcgplayer.png" alt="" width="15" height="15">
+        ${{ "%.2f"|format(stats.totals.tcg_total) }}
+      </span>
+      <span class="stat-tile__money">
+        <img src="/static/icons/manapool.png" alt="" width="15" height="15">
+        ${{ "%.2f"|format(stats.totals.mp_total) }}
+      </span>
+    </div>
+    <div class="stat-tile__note">
+      TCGplayer · Mana Pool{% if stats.totals.tcg_priced < stats.totals.copies
+        or stats.totals.mp_priced < stats.totals.copies %} —
+        {{ stats.totals.tcg_priced }}/{{ stats.totals.mp_priced }} of
+        {{ stats.totals.copies }} priced{% endif %}
+    </div>
+  </div>
+</div>
+
+<section class="stat-section">
+  <h2 class="stat-section__title">By colour</h2>
+  <p class="stat-section__note">
+    A multicolour card counts under each of its colours, so these add up to more
+    than {{ stats.totals.copies }}.
+  </p>
+
+  <table class="breakdown">
+    <thead>
+      <tr>
+        <th scope="col">Colour</th>
+        <th scope="col" class="breakdown__bar-col">Cards</th>
+        <th scope="col" class="num">Total</th>
+        <th scope="col" class="num">Unique</th>
+        <th scope="col" class="num">TCGplayer</th>
+        <th scope="col" class="num">Mana Pool</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in stats.colors %}
+      <tr{% if not c.cards %} class="breakdown--empty"{% endif %}>
+        <th scope="row" class="breakdown__name">
+          <i class="ms ms-{{ c.symbol }} ms-cost" aria-hidden="true"></i>
+          <span>{{ c.name }}</span>
+        </th>
+        <td class="breakdown__bar-col">
+          <span class="bar" style="--w: {{ (c.share * 100)|round(1) }}%"
+                role="img" aria-label="{{ c.cards }} cards"></span>
+        </td>
+        <td class="num">{{ c.cards }}</td>
+        <td class="num">{{ c.unique }}</td>
+        <td class="num">{% if c.tcg %}${{ "%.2f"|format(c.tcg) }}{% else %}—{% endif %}</td>
+        <td class="num">{% if c.mp %}${{ "%.2f"|format(c.mp) }}{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if stats.rarity %}
+<section class="stat-section">
+  <h2 class="stat-section__title">By rarity</h2>
+  <table class="breakdown breakdown--compact">
+    <thead>
+      <tr>
+        <th scope="col">Rarity</th>
+        <th scope="col" class="num">Total</th>
+        <th scope="col" class="num">Unique</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in stats.rarity %}
+      <tr>
+        <th scope="row" class="breakdown__name capitalize">{{ r.rarity }}</th>
+        <td class="num">{{ r.cards }}</td>
+        <td class="num">{{ r.unique_printings }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% endif %}
+{% endblock %}

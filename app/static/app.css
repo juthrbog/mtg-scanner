@@ -389,3 +389,101 @@ a.price-chip:hover {
   text-align: center;
   margin: 0;
 }
+
+/* ---- Stats page ---- */
+.stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.stat-tile {
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 0.75rem;
+  padding: 1rem 1.1rem;
+  background: rgba(128, 128, 128, 0.05);
+}
+
+.stat-tile__label {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.6;
+  margin-bottom: 0.35rem;
+}
+
+.stat-tile__value {
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The value tile carries two figures, so they step down a size and stack. */
+.stat-tile__money {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 1.15rem;
+}
+.stat-tile__money img { border-radius: 3px; flex: none; }
+
+.stat-tile__note { font-size: 0.72rem; opacity: 0.55; margin-top: 0.35rem; }
+
+.stat-section { margin-bottom: 2.25rem; }
+.stat-section__title { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.2rem; }
+.stat-section__note { font-size: 0.78rem; opacity: 0.6; margin: 0 0 0.75rem; }
+
+.breakdown { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+
+.breakdown th, .breakdown td {
+  padding: 0.5rem 0.75rem 0.5rem 0;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.18);
+  text-align: left;
+}
+
+.breakdown thead th {
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  font-weight: 600;
+}
+
+.breakdown .num { text-align: right; font-variant-numeric: tabular-nums; }
+.breakdown tbody tr:last-child th, .breakdown tbody tr:last-child td { border-bottom: none; }
+.breakdown--empty { opacity: 0.4; }
+
+/* Deliberately not display:flex — a flexed <th> stops being a table cell, which
+   knocked the row borders out of alignment. Inline alignment keeps the cell a
+   cell. */
+.breakdown__name { font-weight: 500; white-space: nowrap; }
+.breakdown__name .ms { font-size: 1.05rem; vertical-align: -0.15em; margin-right: 0.45rem; }
+.breakdown__bar-col { width: 45%; }
+.capitalize { text-transform: capitalize; }
+
+/* One hue, because the bar encodes magnitude only — identity is carried by the
+   mana symbol and the colour's name beside it. Six hues would encode identity a
+   second time, and the two adjacent pairs Magic's own colours produce (blue vs
+   black, red vs green) fail colour-vision separation checks. */
+.bar {
+  display: block;
+  height: 0.6rem;
+  width: var(--w, 0%);
+  border-radius: 0 4px 4px 0;
+  background: #4F6BD8;
+}
+
+/* A count of zero draws no bar at all — a minimum width would render a stub
+   that reads as "a little" rather than "none". */
+.bar[style*="--w: 0%"] { display: none; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .bar { background: #7C93EC; }
+}
+:root[data-theme="dark"] .bar { background: #7C93EC; }
+
+@media (max-width: 640px) {
+  .breakdown__bar-col { display: none; }
+}

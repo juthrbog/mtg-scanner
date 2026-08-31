@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import SCAN_CACHE_DIR
 from .db import init_db
 from .recognition.match import art_index, index
-from .routers import collection, scan
+from .routers import collection, scan, stats
 
 app = FastAPI(title="MTG Scanner")
 
@@ -19,6 +19,7 @@ app.mount("/data/scans", StaticFiles(directory=str(SCAN_CACHE_DIR)), name="scans
 
 app.include_router(collection.router, prefix="/collection", tags=["collection"])
 app.include_router(scan.router, prefix="/scan", tags=["scan"])
+app.include_router(stats.router, prefix="/stats", tags=["stats"])
 
 
 @app.on_event("startup")

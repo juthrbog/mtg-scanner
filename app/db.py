@@ -86,6 +86,11 @@ _MIGRATIONS = {
         # Perceptual hash of the illustration window alone. Optional:
         # only populated when hashing runs with art hashing enabled.
         "art_phash": "TEXT",
+        # What colours a card actually represents, including mana it
+        # produces. A Swamp has no mana cost, so `colors` is empty for it
+        # while `color_identity` is black — which is what "how much black
+        # do I own" should count.
+        "color_identity": "TEXT",
     },
 }
 
