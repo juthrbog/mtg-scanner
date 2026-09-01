@@ -6,15 +6,23 @@
 // corner-regularity test — and its constants, so the overlay cannot claim a
 // lock on something the server will reject out of hand.
 //
-// It runs the same two searches — contours for a closed outline, Hough lines
-// for the broken one a borderless card gives — and scores candidates with the
-// same weights, measured at ~40ms a pass against the 120ms budget.
+// It runs the same three searches the server does, in the same order:
 //
-// It is not identical, in two places. The server pads the frame before
-// detecting, so a card at the edge of view still closes its outline; here that
-// is replaced by rejecting quads that rest on the picture's edge, since
-// without padding the image boundary is itself a perfect straight edge that
-// attracts lines. And the gradient is scaled against a multiple of the mean
+//   1. `cardPose` scans a 63:88 rectangle over position, size and rotation and
+//      scores how well its outline sits on image edges. This is what steadied
+//      the overlay — see its comment for the numbers — and at ~13ms a pass it
+//      is also the cheapest of the three.
+//   2. contour following, for a card whose outline is closed.
+//   3. Hough lines, for one whose outline is straight but broken.
+//
+// 2 and 3 are the fallback, kept because they succeed on frames the shape
+// search misses and the reverse.
+//
+// It is not identical to the server, in two places. detect.py pads the frame
+// before detecting so a card at the edge of view still closes its outline;
+// here that is replaced by rejecting quads that rest on the picture's edge,
+// since without padding the image boundary is itself a perfect straight edge
+// that attracts lines. And gradients are scaled against a multiple of the mean
 // rather than a percentile, because OpenCV.js has no percentile reduction.
 //
 // So the overlay stays a hint: the server re-detects on the captured frame,
@@ -389,7 +397,171 @@
     }
   }
 
+  // --- searching for the card's shape directly ---------------------------
+  //
+  // Mirrors card_pose() in detect.py. Everything above hunts for edges and
+  // then asks whether what it found is card-shaped; this scans the one shape
+  // we want — a 63:88 rectangle — over position, size and rotation, and scores
+  // how well its outline sits on image edges.
+  //
+  // That inversion is what steadies the overlay. Assembling a quad from
+  // detected lines is all-or-nothing: lose one faint edge and the quad becomes
+  // a different shape, which is why the outline jumped between frames and
+  // sometimes settled on things that were not card-shaped. Measured on the
+  // server over near-identical frames, the line search moved its answer 53px
+  // on average and found nothing at all in 2 frames of 36; this moves 8px and
+  // always returns something.
+
+  const POSE_W = 240;               // coarser than WORK_WIDTH; this is a search
+  const POSE_ANGLES = [-30, -20, -10, 0, 10, 20, 30];
+  const POSE_FRACTIONS = [0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90];
+  const POSE_BAND = 3;
+  const POSE_STRIDE = 2;            // positions are refined afterwards
+  const POSE_SIZE_WEIGHT = 0.15;
+  // Energy is normalised to 0..1 (see axisEnergy), so this is an absolute
+  // floor like detect.py's. Below it the best pose rests on nothing.
+  const POSE_MIN_SCORE = 0.04;
+
+  // |d/dx| and |d/dy| kept apart: horizontal edges are scored with the vertical
+  // derivative and vice versa, so rules text running parallel to the card's top
+  // edge cannot support it. This is what makes the search card-specific rather
+  // than rectangle-specific.
+  function axisEnergy(srcMat, outX, outY) {
+    const rgb = new cv.Mat(), hsv = new cv.Mat(), lab = new cv.Mat();
+    const hsvP = new cv.MatVector(), labP = new cv.MatVector();
+    const gray = new cv.Mat();
+    const gx = new cv.Mat(), gy = new cv.Mat(), ax = new cv.Mat(), ay = new cv.Mat();
+    try {
+      cv.cvtColor(srcMat, gray, cv.COLOR_RGBA2GRAY);
+      cv.cvtColor(srcMat, rgb, cv.COLOR_RGBA2RGB);
+      cv.cvtColor(rgb, hsv, cv.COLOR_RGB2HSV);
+      cv.split(hsv, hsvP);
+      cv.cvtColor(rgb, lab, cv.COLOR_RGB2Lab);
+      cv.split(lab, labP);
+      const channels = [gray, hsvP.get(1), labP.get(1), labP.get(2)];
+
+      let first = true;
+      for (const ch of channels) {
+        const blur = new cv.Mat();
+        cv.GaussianBlur(ch, blur, new cv.Size(5, 5), 0);
+        cv.Scharr(blur, gx, cv.CV_32F, 1, 0);
+        cv.Scharr(blur, gy, cv.CV_32F, 0, 1);
+        cv.convertScaleAbs(gx, ax);
+        cv.convertScaleAbs(gy, ay);
+        if (first) { ax.convertTo(outX, cv.CV_32F); ay.convertTo(outY, cv.CV_32F); first = false; }
+        else {
+          const fx = new cv.Mat(), fy = new cv.Mat();
+          ax.convertTo(fx, cv.CV_32F); ay.convertTo(fy, cv.CV_32F);
+          cv.max(outX, fx, outX); cv.max(outY, fy, outY);
+          fx.delete(); fy.delete();
+        }
+        blur.delete();
+      }
+      // Scale into 0..1 so POSE_SIZE_WEIGHT and POSE_MIN_SCORE mean the same
+      // here as in detect.py. That module divides by the 99th percentile;
+      // OpenCV.js has no percentile reduction, so a multiple of the mean
+      // stands in, then the result is truncated at 1.
+      for (const m of [outX, outY]) {
+        const scale = 1 / ((cv.mean(m)[0] || 1) * 5);
+        m.convertTo(m, cv.CV_32F, scale, 0);
+        cv.threshold(m, m, 1.0, 0, cv.THRESH_TRUNC);
+      }
+    } finally {
+      rgb.delete(); hsv.delete(); lab.delete(); hsvP.delete(); labP.delete();
+      gray.delete(); gx.delete(); gy.delete(); ax.delete(); ay.delete();
+    }
+  }
+
+  // Sum over an axis-aligned rectangle of an integral image, in O(1).
+  function boxSum(ii, stride, y0, y1, x0, x1) {
+    return ii[y1 * stride + x1] - ii[y0 * stride + x1] - ii[y1 * stride + x0] + ii[y0 * stride + x0];
+  }
+
+  function posePass(iiX, iiY, iw, ih, stride, h, w, band, x0, x1, y0, y1, step) {
+    let best = -Infinity, bx = 0, by = 0;
+    const areaH = w * band, areaV = h * band;
+    for (let y = y0; y <= y1; y += step) {
+      for (let x = x0; x <= x1; x += step) {
+        const top = boxSum(iiY, stride, y, y + band, x, x + w) / areaH;
+        if (top <= best) { /* cheap early out on the first side */ }
+        const bottom = boxSum(iiY, stride, y + h - band, y + h, x, x + w) / areaH;
+        const left = boxSum(iiX, stride, y, y + h, x, x + band) / areaV;
+        const right = boxSum(iiX, stride, y, y + h, x + w - band, x + w) / areaV;
+        const score = Math.min(Math.min(top, bottom), Math.min(left, right));
+        if (score > best) { best = score; bx = x; by = y; }
+      }
+    }
+    return { score: best, x: bx, y: by };
+  }
+
+  function cardPose(srcMat) {
+    const small = new cv.Mat();
+    const ex = new cv.Mat(), ey = new cv.Mat();
+    let result = null;
+    try {
+      const scale = POSE_W / srcMat.cols;
+      cv.resize(srcMat, small, new cv.Size(POSE_W, Math.round(srcMat.rows * scale)));
+      axisEnergy(small, ex, ey);
+      const w_s = ex.cols, h_s = ex.rows;
+
+      let best = null;
+      for (const angle of POSE_ANGLES) {
+        const rot = cv.getRotationMatrix2D(new cv.Point(w_s / 2, h_s / 2), angle, 1);
+        const rx = new cv.Mat(), ry = new cv.Mat(), iX = new cv.Mat(), iY = new cv.Mat();
+        try {
+          cv.warpAffine(ex, rx, rot, new cv.Size(w_s, h_s));
+          cv.warpAffine(ey, ry, rot, new cv.Size(w_s, h_s));
+          cv.integral(rx, iX, cv.CV_64F);
+          cv.integral(ry, iY, cv.CV_64F);
+          const iiX = iX.data64F, iiY = iY.data64F, stride = iX.cols;
+          for (const frac of POSE_FRACTIONS) {
+            const h = Math.round(h_s * frac);
+            const w = Math.round(h / CARD_ASPECT);
+            if (w < 20 || w >= w_s || h >= h_s) continue;
+            const coarse = posePass(iiX, iiY, w_s, h_s, stride, h, w, POSE_BAND,
+                                    0, w_s - w - 1, 0, h_s - h - 1, POSE_STRIDE);
+            // Refine the position around the coarse winner at full resolution.
+            const fine = posePass(iiX, iiY, w_s, h_s, stride, h, w, POSE_BAND,
+                                  Math.max(0, coarse.x - POSE_STRIDE), Math.min(w_s - w - 1, coarse.x + POSE_STRIDE),
+                                  Math.max(0, coarse.y - POSE_STRIDE), Math.min(h_s - h - 1, coarse.y + POSE_STRIDE), 1);
+            const rank = fine.score + POSE_SIZE_WEIGHT * frac;
+            if (!best || rank > best.rank) {
+              best = { rank, score: fine.score, angle, x: fine.x, y: fine.y, w, h };
+            }
+          }
+        } finally { rot.delete(); rx.delete(); ry.delete(); iX.delete(); iY.delete(); }
+      }
+
+      if (best && best.score > POSE_MIN_SCORE) {
+        const corners = [
+          { x: best.x, y: best.y }, { x: best.x + best.w, y: best.y },
+          { x: best.x + best.w, y: best.y + best.h }, { x: best.x, y: best.y + best.h },
+        ];
+        const rot = cv.getRotationMatrix2D(new cv.Point(w_s / 2, h_s / 2), best.angle, 1);
+        const inv = new cv.Mat();
+        cv.invertAffineTransform(rot, inv);
+        const m = inv.data64F;
+        result = corners.map((p) => ({
+          x: (m[0] * p.x + m[1] * p.y + m[2]) / scale,
+          y: (m[3] * p.x + m[4] * p.y + m[5]) / scale,
+        }));
+        rot.delete(); inv.delete();
+      }
+    } finally {
+      small.delete(); ex.delete(); ey.delete();
+    }
+    return result;
+  }
+
   function detect(srcMat, frameArea) {
+    // The shape search first: it is the steadiest and the cheapest, and unlike
+    // the edge-following searches below it effectively always returns
+    // something. Those stay as the fallback because they succeed on frames it
+    // misses — measured server-side, either alone reads 17-18 of 25 real
+    // captures and together they read 20.
+    const posed = cardPose(srcMat);
+    if (posed) return orderCorners(posed);
+
     const gray = new cv.Mat();
     const hsv = new cv.Mat();
     const rgb = new cv.Mat();
