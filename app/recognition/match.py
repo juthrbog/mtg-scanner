@@ -37,6 +37,7 @@ class HashIndex:
     def __init__(self) -> None:
         self._ids: List[str] = []
         self._matrix: np.ndarray | None = None  # shape (n_cards, n_bytes), uint8
+        self._pos: dict | None = None  # scryfall id -> row, built lazily
         self.stale = 0  # hashes skipped because they were stored at another size
 
     def reload(self, column: str = "phash") -> int:
@@ -59,6 +60,7 @@ class HashIndex:
             self._matrix = np.vstack([_hash_to_bytes(imagehash.hex_to_hash(r["phash"])) for r in usable])
         else:
             self._matrix = None
+        self._pos = None
         return len(self._ids)
 
     def __len__(self) -> int:
@@ -67,6 +69,22 @@ class HashIndex:
     def _distances(self, query: imagehash.ImageHash) -> np.ndarray:
         assert self._matrix is not None
         return _POPCOUNT[np.bitwise_xor(self._matrix, _hash_to_bytes(query))].sum(axis=1)
+
+    def distances_for(self, query: imagehash.ImageHash, scryfall_ids) -> dict:
+        """Distance from one query to specific cards.
+
+        Used to order the printings of a card the OCR named: the hash is a
+        poor way to pick the card but a serviceable way to pick which printing
+        of it is in front of the camera, because it is only separating a
+        handful of images instead of a hundred thousand.
+        """
+        if self._matrix is None:
+            return {}
+        if self._pos is None:
+            self._pos = {sid: i for i, sid in enumerate(self._ids)}
+        distances = self._distances(query)
+        return {sid: int(distances[self._pos[sid]])
+                for sid in scryfall_ids if sid in self._pos}
 
     def best_matches(self, query: imagehash.ImageHash, top_n: int = 3) -> List[MatchCandidate]:
         if self._matrix is None:

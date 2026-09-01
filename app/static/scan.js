@@ -159,9 +159,15 @@ if (autoCaptureToggle) {
 }
 
 // Both matching options are remembered between visits, like auto-capture.
-[["mtg.useArt", artToggle], ["mtg.useOcr", ocrToggle]].forEach(([key, el]) => {
+// Name check defaults *on*: measured over 26 real captures the image hash
+// never put the correct card first, while reading the printed name identified
+// 21 of 25, so leaving it off ships the scanner with its working half
+// disabled. Art matching stays off by default — it assumes a standard card
+// frame and so misses exactly the full-art printings that need the most help.
+[["mtg.useArt", artToggle, false], ["mtg.useOcr", ocrToggle, true]].forEach(([key, el, fallback]) => {
   if (!el) return;
-  el.checked = localStorage.getItem(key) === "1";
+  const stored = localStorage.getItem(key);
+  el.checked = stored === null ? fallback : stored === "1";
   el.addEventListener("change", () => localStorage.setItem(key, el.checked ? "1" : "0"));
 });
 

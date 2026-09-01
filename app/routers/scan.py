@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse
 
 from ..config import (
     HASH_MATCH_THRESHOLD,
+    PHASH_BITS,
     SCAN_CACHE_DIR,
     TOP_N_CANDIDATES,
     confidence_from_distance,
@@ -114,12 +115,39 @@ async def capture(
                 "verdict": match_verdict(m.distance),
             })
 
-    # OCR can only reorder what the hash already found, so a misread can never
-    # introduce a card that wasn't a visual match in the first place.
+    # Reading the printed name is not a tie-breaker on these captures, it is
+    # the primary signal. Measured over 26 real frames the hash never once put
+    # the correct card first — at any fingerprint size — because it compares a
+    # photograph against Scryfall's render, and glare, warm light and a webcam
+    # lens make that comparison close to uninformative. Reading the name
+    # identified 21 of 25, and named a wrong card zero times.
+    #
+    # So OCR may now introduce candidates rather than only reorder them. It is
+    # held to a stricter similarity for that, and stays silent when unsure.
     ocr_title = None
     if use_ocr and crops:
-        ocr_title = ocr_mod.read_title(crops[winner])
-        candidates = ocr_mod.rerank(candidates, ocr_title)
+        for crop in crops[:3]:
+            ocr_title = ocr_mod.read_title(crop)
+            named = ocr_mod.find_by_name(conn, ocr_title)
+            if named:
+                # The hash is a poor way to pick the card but a fine way to
+                # pick which *printing* of it is in shot — it only has to
+                # separate a handful of images instead of a hundred thousand.
+                query = hash_frame(crop)
+                distances = index.distances_for(query, [n["card"]["id"] for n in named])
+                for hit in named:
+                    hit["distance"] = distances.get(hit["card"]["id"], PHASH_BITS)
+                    hit["confidence"] = round(hit["name_score"] * 100)
+                    hit["verdict"] = "Name"
+                    hit["ocr_agrees"] = True
+                named.sort(key=lambda h: h["distance"])
+
+                seen = {h["card"]["id"] for h in named}
+                candidates = named + [c for c in candidates if c["card"]["id"] not in seen]
+                candidates = candidates[:TOP_N_CANDIDATES]
+                break
+        else:
+            candidates = ocr_mod.rerank(candidates, ocr_title)
 
     conn.execute(
         "INSERT INTO scan_event (matched_id, confidence, image_path, accepted) VALUES (?, ?, ?, NULL)",
@@ -134,7 +162,14 @@ async def capture(
         request,
         "partials/scan_result.html",
         {"candidates": candidates,
-            "low_confidence": not candidates or candidates[0]["distance"] > HASH_MATCH_THRESHOLD,
+            # A card identified by its printed name is not a weak match, even
+            # though its hash distance is large — on a real photograph the
+            # distance is large for the *right* card too, which is the whole
+            # reason the name is being read.
+            "low_confidence": not candidates or (
+                candidates[0].get("verdict") != "Name"
+                and candidates[0]["distance"] > HASH_MATCH_THRESHOLD
+            ),
             "ocr_title": ocr_title,
             "scan_image": f"/data/scans/{image_path.name}",
         },

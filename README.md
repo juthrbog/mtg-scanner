@@ -121,13 +121,24 @@ Three toggles on the scan page, each remembered between visits:
   standard frame, so full-art and showcase printings can miss; it's consulted
   *alongside* whole-card matching and only wins when it scores closer.
 
-- **Name check** reads the printed name with OCR and uses it to re-rank the
-  image matches. The two signals fail differently: hashing degrades gradually
-  as a photo softens, while OCR is either right or silent — on progressively
-  worse captures it read titles perfectly until the image went both soft *and*
-  dim, then returned nothing rather than guessing. It can only reorder
-  candidates the image match already found, so a misread can't invent a card.
-  Adds roughly 300ms per scan.
+- **Name check** reads the printed name with OCR and looks the card up by it.
+  **On by default, because it is the signal that works.** Measured over 26 real
+  webcam captures, the image hash never once put the correct card first, while
+  reading the name identified 21 of 25 and named a wrong card zero times — the
+  four failures were silence, not a wrong answer. The two signals still fail
+  differently, which is why both run: OCR is either right or quiet, the hash
+  degrades gradually. Adds roughly 300ms per scan.
+
+  Why the hash does so poorly on real photographs is worth stating plainly,
+  since the rest of this README talks about it a lot: pHash compares a
+  photograph against Scryfall's *render* of the same card, and glare, warm
+  indoor light and a webcam lens leave too little in common. On a hand-cropped,
+  pixel-accurate warp of a plain black-bordered card the right answer still
+  ranked 5367th of 111154 — and that was the *best* case across 64-, 100-,
+  144- and 256-bit fingerprints, with and without contrast and illumination
+  normalisation. It is kept because it costs nothing to consult, it picks
+  correctly between the handful of printings of a card the name identified,
+  and it is the fallback when OCR stays silent.
 
 Each result shows a verdict (Strong / Good / Weak / Unreliable) with the raw
 Hamming distance beside it. The distance is the useful number when a scan goes
@@ -439,10 +450,16 @@ Tailwind binary are gitignored and re-fetched with `./fetch-assets.sh`.
   navigation, form semantics and mobile behaviour are unchanged. Browsers
   without support ignore the rules and show their native picker.
 
-- **Where matching could go next.** Recognition is perceptual hashing; the OCR
-  name check is the only ML dependency and it's optional. If glare tolerance
-  becomes a real problem, the natural upgrade is comparing CLIP/SigLIP
-  embeddings instead of Hamming distance — pretrained embeddings for every
-  Scryfall card exist at
-  `TrevorJS/mtg-scryfall-cropped-art-embeddings-siglip-so400m-patch14-384`
+- **Where matching should go next.** Reading the name now carries the scan and
+  perceptual hashing contributes almost nothing on real photographs (see **Name
+  check** above for the numbers). That makes the embedding upgrade the obvious
+  next step rather than a speculative one: comparing CLIP/SigLIP embeddings
+  instead of Hamming distance tolerates exactly the photograph-versus-render
+  gap that defeats pHash. Pretrained embeddings for every Scryfall card exist
+  at `TrevorJS/mtg-scryfall-cropped-art-embeddings-siglip-so400m-patch14-384`
   on Hugging Face, so nothing needs training.
+
+  Until then the honest summary is: **the scanner identifies cards by reading
+  them, not by looking at them.** Anything that hurts the printed name — a
+  thumb over the title, heavy glare on the top of the card, a very soft frame —
+  will lose the scan, and no amount of tuning the hash will rescue it.
