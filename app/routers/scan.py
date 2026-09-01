@@ -84,6 +84,14 @@ async def capture(
     image_path = SCAN_CACHE_DIR / f"{scan_id}.jpg"
     cv2.imwrite(str(image_path), crops[winner] if crops else frame)
 
+    # Keep the frame detection ran *on*, alongside the crop it produced.
+    # Without this a scan that goes wrong leaves only the wrong answer and no
+    # way to reproduce it: tuning detection against saved crops means tuning
+    # against its own output. These are the only real-world inputs there are,
+    # so they are what any future change has to be measured on.
+    cv2.imwrite(str(SCAN_CACHE_DIR / f"{scan_id}-frame.jpg"), frame,
+                [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+
     candidates = []
     if matches:
         placeholders = ",".join("?" * len(matches))

@@ -1,15 +1,28 @@
 """Locate the card in a captured frame and produce candidate crops to match against.
 
-The client (scan.js) already crops the camera feed to a card-shaped region,
-so this module's job is to tighten that up — strip any remaining background
-without cutting into the card itself.
+The browser uploads the whole camera frame, so finding the card is entirely
+this module's job. Rather than betting everything on one guess,
+`card_candidates()` returns several plausible crops; the matcher hashes each
+and keeps whichever scores best, so one bad outline can't sink the scan.
 
-Rather than betting everything on one contour guess, `card_candidates()`
-returns several plausible crops. The matcher hashes each and keeps whichever
-scores best, so a single bad contour can't sink the scan.
+Two searches run over the same frame because they fail in opposite conditions:
+
+* **Contour following** needs the card's boundary to be closed. That holds for
+  a black-bordered card on a plain surface, where it is also the more precise
+  of the two.
+* **Line fitting** does not. A borderless or full-art card held in the hand has
+  a boundary that is straight but broken, and measured on real captures no
+  four-sided contour was found around any of them — every quad the earlier code
+  returned came from `minAreaRect` on some unrelated blob.
+
+Candidates from both are then *scored* rather than ordered by size. Preferring
+the largest is what made detection return the camera frame itself: with a
+borderless card the frame outline was the only strong closed contour, and
+nothing in the old gates excluded it.
 """
 from __future__ import annotations
 
+import itertools
 from typing import List
 
 import cv2
@@ -28,10 +41,41 @@ OUTPUT_HEIGHT = int(OUTPUT_WIDTH * CARD_ASPECT)
 # locks onto the art box or text box *inside* the card and crops into it,
 # throwing away the parts that make the card identifiable.
 #
-# The allowance is generous because a card viewed at an angle is foreshortened:
-# its apparent ratio shrinks with the cosine of the tilt, so a strict gate
-# rejects genuinely tilted cards before they ever reach the warp.
-ASPECT_TOLERANCE = 0.32
+# Stated as an explicit range rather than a tolerance band, because the band
+# form hid a bug worth remembering. It was written as ±32% around 1.397, which
+# works out to 0.95–1.84; since the ratio is computed as max/min it can never
+# be below 1.0, so the gate really accepted 1.00–1.84 — every camera frame,
+# every torso, every face. Detection duly returned the frame itself whenever a
+# card's own outline was faint, which is exactly what borderless cards do.
+#
+# The range still has to allow foreshortening: tilting a card about its long
+# axis squashes the height and the ratio falls, about its short axis the width
+# goes and it rises. cos(40°) = 0.77 bounds both directions.
+ASPECT_MIN = 1.12
+ASPECT_MAX = 1.85
+
+# A card held up to a webcam fills perhaps a third of the view. Anything
+# covering most of the frame is the frame, the wall, or the person holding it.
+# This is the ceiling the old code lacked entirely.
+MAX_AREA_FRACTION = 0.72
+
+# How much of a quad's outline must sit on a real intensity edge, on its
+# *weakest* side. This is the test that separates a card from a torso: both
+# are roughly rectangular and roughly the right size, but a spurious quad is
+# only supported on the two or three sides that happen to follow a shadow,
+# whereas a card has all four. Measured on real captures below.
+EDGE_SUPPORT_MIN = 0.12
+
+# Line-based detection: how many of the longest lines to keep per direction,
+# and how long a line must be to count. Every pair from one direction is
+# crossed with every pair from the other, so cost is quartic in this — 12 gives
+# 66 pairs a side and 4356 candidate quads at ~170ms a frame. Measured on the
+# real captures: 8 costs 81ms and locates the card to 6.9%, 12 costs 173ms for
+# 3.7%, and 14 and 18 buy nothing further while costing 289ms and 694ms. The
+# cheap geometric gates reject almost every candidate before the expensive
+# edge-support test runs, which is what keeps this affordable at all.
+HOUGH_MAX_LINES = 12
+HOUGH_MIN_LENGTH_FRACTION = 0.18
 
 # Smallest share of the frame a contour may cover and still be considered the
 # card. The client now uploads the whole camera frame rather than a tight
@@ -48,8 +92,10 @@ MIN_AREA_FRACTION = 0.035
 MAX_CONTOURS_CONSIDERED = 40
 
 # How many detected quads to hand back as candidates. The matcher scores each
-# and keeps the best, so offering a couple of runners-up costs little.
-MAX_QUAD_CANDIDATES = 2
+# and keeps the best, so offering runners-up costs little — and now that quads
+# are ranked by how card-like they are rather than by size, the right one is
+# usually at or near the top instead of buried behind the frame outline.
+MAX_QUAD_CANDIDATES = 4
 
 # A card held near the edge of the view touches the frame border, and a
 # contour that runs off the image never closes — detection then locks onto the
@@ -116,49 +162,265 @@ def title_strip(card: np.ndarray) -> np.ndarray:
     return _sub_box(card, TITLE_BOX)
 
 
-def _aspect_is_card_like(w: float, h: float) -> bool:
-    if w <= 1 or h <= 1:
-        return False
-    # Accept either orientation; a sideways card is still a card, and the
-    # warp will square it up.
-    ratio = max(w, h) / min(w, h)
-    return abs(ratio - CARD_ASPECT) <= ASPECT_TOLERANCE * CARD_ASPECT
+def _quad_aspect(quad: np.ndarray) -> float:
+    """Aspect from the quad's own sides rather than its bounding box.
+
+    A tilted card's bounding box is close to square even when the card itself
+    is plainly card-shaped, so measuring the box throws away the very signal
+    the gate depends on.
+    """
+    q = _order_corners(quad)
+    width = (np.linalg.norm(q[1] - q[0]) + np.linalg.norm(q[2] - q[3])) / 2
+    height = (np.linalg.norm(q[3] - q[0]) + np.linalg.norm(q[2] - q[1])) / 2
+    if width < 2 or height < 2:
+        return 0.0
+    return float(max(width, height) / min(width, height))
 
 
-def _quads_from_channel(channel: np.ndarray, frame_area: float, limit: int) -> List[np.ndarray]:
-    """Card-shaped outlines found in one single-channel image."""
+def _corner_regularity(quad: np.ndarray) -> float:
+    """1.0 when every corner is square, falling to 0 by 45° of skew."""
+    q = _order_corners(quad)
+    worst = 0.0
+    for i in range(4):
+        a, b, c = q[(i - 1) % 4], q[i], q[(i + 1) % 4]
+        v1, v2 = a - b, c - b
+        n1, n2 = np.linalg.norm(v1), np.linalg.norm(v2)
+        if n1 < 2 or n2 < 2:
+            return 0.0
+        cos = float(np.clip(np.dot(v1, v2) / (n1 * n2), -1.0, 1.0))
+        worst = max(worst, abs(np.degrees(np.arccos(cos)) - 90.0))
+    return max(0.0, 1.0 - worst / 45.0)
+
+
+def _gradient(channel: np.ndarray) -> np.ndarray:
+    """Edge strength, scaled so the threshold means the same on any image.
+
+    Normalised against a high percentile rather than the maximum: a single
+    specular highlight sets the maximum and would push every real edge down to
+    a fraction of full scale.
+    """
+    gx = cv2.Scharr(channel, cv2.CV_32F, 1, 0)
+    gy = cv2.Scharr(channel, cv2.CV_32F, 0, 1)
+    mag = cv2.magnitude(gx, gy)
+    scale = float(np.percentile(mag, 99)) or 1.0
+    return np.clip(mag / scale, 0.0, 1.0)
+
+
+def _edge_support(quad: np.ndarray, mag: np.ndarray, samples: int = 32) -> float:
+    """How well the quad's weakest side is backed by an actual edge.
+
+    The decisive test for a card with no black border. A quad around the frame,
+    a forearm or a shadow is supported on the sides that happen to follow
+    something and unsupported on the rest; a card is supported all the way
+    round. Scoring the weakest side is what tells them apart — an average would
+    let three strong sides carry one that rests on nothing.
+    """
+    q = _order_corners(quad)
+    h, w = mag.shape[:2]
+    weakest = 1.0
+    for i in range(4):
+        a, b = q[i], q[(i + 1) % 4]
+        # Skip the corners: they are the least reliably placed part of a quad.
+        ts = np.linspace(0.08, 0.92, samples)[:, None]
+        pts = a[None, :] + (b - a)[None, :] * ts
+        xs = np.clip(pts[:, 0].astype(int), 1, w - 2)
+        ys = np.clip(pts[:, 1].astype(int), 1, h - 2)
+        # Strongest response in a 3x3 window, so an edge a pixel or two off the
+        # fitted line still counts as support.
+        best = np.zeros(len(ts), dtype=np.float32)
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                best = np.maximum(best, mag[ys + dy, xs + dx])
+        weakest = min(weakest, float(best.mean()))
+    return weakest
+
+
+def _is_frame_outline(quad: np.ndarray, padded_shape, pad: int) -> bool:
+    """True if this quad is just the edge of the padded image.
+
+    Padding with a flat colour is what lets a card at the edge of the view
+    close its outline, but it necessarily draws a perfect rectangle around the
+    whole picture — larger than any card and, before quads were scored, always
+    the winner. A real card can have a corner or two out at the boundary; all
+    four means it is the boundary.
+    """
+    h, w = padded_shape[:2]
+    q = np.asarray(quad, dtype=np.float32)
+    slack = max(4.0, pad * 0.35)
+    on_edge = (
+        (np.abs(q[:, 0] - pad) < slack) | (np.abs(q[:, 0] - (w - pad)) < slack)
+    ) & (
+        (np.abs(q[:, 1] - pad) < slack) | (np.abs(q[:, 1] - (h - pad)) < slack)
+    )
+    return bool(on_edge.sum() >= 4)
+
+
+def _score_quad(quad: np.ndarray, mag: np.ndarray, frame_area: float,
+                pad: int, padded_shape) -> float | None:
+    """How card-like a quad is, or None if it is not a plausible card at all."""
+    area = abs(cv2.contourArea(quad.astype(np.float32)))
+    if not (frame_area * MIN_AREA_FRACTION <= area <= frame_area * MAX_AREA_FRACTION):
+        return None
+    aspect = _quad_aspect(quad)
+    if not (ASPECT_MIN <= aspect <= ASPECT_MAX):
+        return None
+    if _is_frame_outline(quad, padded_shape, pad):
+        return None
+    regularity = _corner_regularity(quad)
+    if regularity < 0.25:
+        return None
+    support = _edge_support(quad, mag)
+    if support < EDGE_SUPPORT_MIN:
+        return None
+
+    rect = cv2.minAreaRect(quad.astype(np.float32))
+    rect_area = rect[1][0] * rect[1][1]
+    fill = min(area / rect_area, 1.0) if rect_area > 1 else 0.0
+    closeness = 1.0 - min(abs(aspect - CARD_ASPECT) / 0.45, 1.0)
+
+    # Prefer the larger candidate, saturating at a plausible card size. A card
+    # is full of smaller rectangles — the text box, the art window, the mana
+    # cost — and they are *more* perfectly card-shaped than the card itself,
+    # which is bounded by rounded corners and a hand. Without this a 7%-of-frame
+    # inner box outranked the real outline. Note this is not the old
+    # "biggest wins" ordering: it only breaks ties between quads that already
+    # passed the aspect, size, frame and edge-support gates, and it stops
+    # rewarding growth well before the ceiling.
+    size = min(area / (frame_area * 0.30), 1.0)
+
+    # Edge support carries the most weight: it is the only term that checks the
+    # quad against the image rather than against its own geometry.
+    return 2.0 * support + 1.2 * closeness + 1.0 * size + 0.8 * regularity + 0.6 * fill
+
+
+def _channel_edges(channel: np.ndarray) -> np.ndarray:
+    """Edges in one channel, from two thresholdings.
+
+    One threshold pair cannot serve both cases: fixed values find the crisp
+    outline of a black-bordered card, while thresholds derived from the image
+    median are what pick up the low-contrast boundary of a borderless card
+    lying against skin or a pale wall.
+    """
     blurred = cv2.GaussianBlur(channel, (5, 5), 0)
-    edges = cv2.Canny(blurred, 40, 120)
-    edges = cv2.dilate(edges, None, iterations=2)
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    median = float(np.median(blurred))
+    return cv2.Canny(blurred, 40, 120) | cv2.Canny(
+        blurred, int(max(0, 0.66 * median)), int(min(255, 1.33 * median))
+    )
 
-    found: List[np.ndarray] = []
+
+def _quads_from_contours(edges: np.ndarray, mag: np.ndarray, frame_area: float,
+                         pad: int, shape) -> List[tuple]:
+    """Scored outlines from contour following.
+
+    Works when the card's boundary is closed — a bordered card on a plain
+    surface. It is kept alongside the line-based search below because when it
+    does work it is the more precise of the two.
+    """
+    # One dilation, not two: two closes the gap between a card and the hand
+    # holding it, merging them into a single blob whose outline is neither.
+    edges = cv2.dilate(edges, None, iterations=1)
+    # RETR_LIST rather than RETR_EXTERNAL — a borderless card whose edge merges
+    # with the background is not an outermost contour, so asking only for
+    # outermost ones is asking for everything except the card.
+    contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+    scored: List[tuple] = []
     for contour in sorted(contours, key=cv2.contourArea, reverse=True)[:MAX_CONTOURS_CONSIDERED]:
         if cv2.contourArea(contour) < frame_area * MIN_AREA_FRACTION:
             break  # sorted by area, so everything after this is smaller too
 
-        rect = cv2.minAreaRect(contour)
-        (_, (rw, rh), _) = rect
-        if not _aspect_is_card_like(rw, rh):
-            continue
-
         perimeter = cv2.arcLength(contour, True)
         approx = cv2.approxPolyDP(contour, 0.02 * perimeter, True)
         if len(approx) == 4:
-            found.append(approx.reshape(4, 2).astype("float32"))
+            quad = approx.reshape(4, 2).astype("float32")
         else:
-            found.append(cv2.boxPoints(rect).astype("float32"))
+            quad = cv2.boxPoints(cv2.minAreaRect(contour)).astype("float32")
 
-        if len(found) >= limit:
-            break
-    return found
+        score = _score_quad(quad, mag, frame_area, pad, shape)
+        if score is not None:
+            scored.append((score, quad))
+    return scored
 
 
-def _detect_quads(frame: np.ndarray, limit: int = MAX_QUAD_CANDIDATES, pad: int = 0) -> List[np.ndarray]:
-    """Find believable card outlines, largest first.
+def _to_line(x1: float, y1: float, x2: float, y2: float):
+    """A segment as the coefficients of the infinite line through it."""
+    a, b = y2 - y1, x1 - x2
+    return a, b, a * x1 + b * y1
 
-    Runs edge detection twice, over two different channels, because they fail
-    in different situations:
+
+def _intersect(l1, l2):
+    a1, b1, c1 = l1
+    a2, b2, c2 = l2
+    det = a1 * b2 - a2 * b1
+    if abs(det) < 1e-6:
+        return None  # parallel
+    return ((b2 * c1 - b1 * c2) / det, (a1 * c2 - a2 * c1) / det)
+
+
+def _quads_from_lines(edges: np.ndarray, mag: np.ndarray, frame_area: float,
+                      pad: int, shape) -> List[tuple]:
+    """Scored outlines rebuilt from long straight lines.
+
+    This is the case contour following cannot reach. Following a contour needs
+    the boundary to be *closed*, and a borderless card against skin has a
+    boundary that is straight but broken — measured on real captures, no
+    four-sided contour was found around any of them, and every quad the old
+    code returned came from `minAreaRect` on some other blob entirely.
+
+    A Hough transform does not care about closure: every fragment of an edge
+    votes for the same infinite line, so four dashed-looking sides still
+    produce four strong lines. Taking two lines from each of the two dominant
+    directions and intersecting them reconstructs the quad.
+    """
+    height, width = edges.shape[:2]
+    min_len = int(HOUGH_MIN_LENGTH_FRACTION * min(height, width))
+    segments = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=55,
+                               minLineLength=min_len, maxLineGap=18)
+    if segments is None:
+        return []
+    segments = segments.reshape(-1, 4).astype(np.float64)
+
+    angles = np.degrees(np.arctan2(segments[:, 3] - segments[:, 1],
+                                   segments[:, 2] - segments[:, 0])) % 180
+    lengths = np.hypot(segments[:, 2] - segments[:, 0], segments[:, 3] - segments[:, 1])
+
+    # Length-weighted dominant direction, computed on doubled angles so that
+    # 1° and 179° — the same direction — average to 0° instead of 90°.
+    doubled = np.radians(angles * 2)
+    dominant = np.degrees(np.arctan2((lengths * np.sin(doubled)).sum(),
+                                     (lengths * np.cos(doubled)).sum())) / 2 % 180
+
+    def offset(angle: float, reference: float) -> float:
+        d = abs(angle - reference) % 180
+        return min(d, 180 - d)
+
+    def family(reference: float) -> list:
+        members = [i for i in range(len(segments)) if offset(angles[i], reference) < 30]
+        members.sort(key=lambda i: -lengths[i])
+        return [_to_line(*segments[i]) for i in members[:HOUGH_MAX_LINES]]
+
+    side_a = family(dominant)
+    side_b = family((dominant + 90) % 180)
+
+    scored: List[tuple] = []
+    for a1, a2 in itertools.combinations(side_a, 2):
+        for b1, b2 in itertools.combinations(side_b, 2):
+            corners = [_intersect(a, b) for a in (a1, a2) for b in (b1, b2)]
+            if any(c is None for c in corners):
+                continue
+            # Ordered round the quad, not in the order the pairs produced.
+            quad = np.array([corners[0], corners[1], corners[3], corners[2]],
+                            dtype="float32")
+            if not np.all(np.isfinite(quad)):
+                continue
+            score = _score_quad(quad, mag, frame_area, pad, shape)
+            if score is not None:
+                scored.append((score, quad))
+    return scored
+
+
+def _channels(frame: np.ndarray) -> List[np.ndarray]:
+    """The single-channel views detection searches, and why each is there.
 
       * **Brightness** is the natural choice and works on an ordinary desk.
       * **Saturation** carries the card when brightness cannot. Glare adds
@@ -166,10 +428,29 @@ def _detect_quads(frame: np.ndarray, limit: int = MAX_QUAD_CANDIDATES, pad: int 
         the card's edges in the grey channel leaves them intact in saturation
         — measured, a glare patch that pushed grey-channel detection 43px off
         left saturation detection accurate to 2px.
+      * **Lab a and b** separate by hue where the other two see nothing. A
+        borderless card held in the hand is the hard case precisely because it
+        has no dark rim to find, but skin against green or blue card art is a
+        large, clean step in a/b even when brightness and saturation are
+        nearly continuous across the boundary.
+    """
+    lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+    return [
+        cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY),
+        cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 1],
+        lab[:, :, 1],
+        lab[:, :, 2],
+    ]
 
-    Both sets are returned. The matcher scores every candidate and keeps the
-    best, so an extra wrong guess costs a few milliseconds while a right one
-    rescues the scan.
+
+def _detect_quads(frame: np.ndarray, limit: int = MAX_QUAD_CANDIDATES, pad: int = 0) -> List[np.ndarray]:
+    """Find believable card outlines, most card-like first.
+
+    Every channel's candidates are scored on the same scale and ranked
+    together, rather than each channel contributing its own largest few. Size
+    is deliberately not the ranking: the biggest quad in a handheld shot is
+    reliably the frame, the wall, or the person, and ordering by area is what
+    made detection return those.
 
     `pad` is the border width to add around the frame so a card touching the
     edge of the view still forms a closed contour. Each channel is padded with
@@ -180,19 +461,46 @@ def _detect_quads(frame: np.ndarray, limit: int = MAX_QUAD_CANDIDATES, pad: int 
     Returned corners are in the coordinate space of the padded image, matching
     what `card_candidates` warps from.
     """
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    saturation = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 1]
-
     frame_area = frame.shape[0] * frame.shape[1]
 
-    found: List[np.ndarray] = []
-    for channel in (gray, saturation):
+    per_channel: List[np.ndarray] = []
+    union: np.ndarray | None = None
+    strongest: np.ndarray | None = None
+    for channel in _channels(frame):
         if pad:
             channel = cv2.copyMakeBorder(
                 channel, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=int(np.median(channel))
             )
-        found.extend(_quads_from_channel(channel, frame_area, limit))
-    return found
+        edges = _channel_edges(channel)
+        per_channel.append(edges)
+        union = edges if union is None else (union | edges)
+        gradient = _gradient(cv2.GaussianBlur(channel, (5, 5), 0))
+        strongest = gradient if strongest is None else np.maximum(strongest, gradient)
+
+    shape = per_channel[0].shape
+    scored: List[tuple] = []
+    for edges in per_channel:
+        scored.extend(_quads_from_contours(edges, strongest, frame_area, pad, shape))
+    # Lines are searched over the union: a card whose left edge only shows in
+    # saturation and whose top only shows in Lab-a still has four sides here,
+    # and it is the four together that make the quad.
+    scored.extend(_quads_from_lines(union, strongest, frame_area, pad, shape))
+
+    scored.sort(key=lambda s: s[0], reverse=True)
+
+    # Different channels routinely find the same card. Keep the best-scoring
+    # version of each distinct outline so the candidate slots go to genuinely
+    # different guesses instead of four copies of one.
+    kept: List[np.ndarray] = []
+    for _, quad in scored:
+        centre = _order_corners(quad).mean(axis=0)
+        if any(np.linalg.norm(centre - _order_corners(k).mean(axis=0)) < 0.05 * max(frame.shape[:2])
+               for k in kept):
+            continue
+        kept.append(quad)
+        if len(kept) >= limit:
+            break
+    return kept
 
 
 def _center_crop(frame: np.ndarray) -> np.ndarray:
