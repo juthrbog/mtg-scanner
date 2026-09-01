@@ -97,15 +97,16 @@ To try things quickly without the full download, `sync` takes
 
 The browser uploads the **whole camera frame** and the server locates the card
 within it, so a card doesn't have to be centred or square to the lens.
-`detect-live.js` runs the same detection live and draws the outline over the
-preview, turning green once it has held steady — and that outline is what the
-server works from, because both run the same algorithm with the same
-constants.
+`detect-live.js` runs the same three searches live and draws the outline over
+the preview, turning green once it has held steady. That outline is sent with
+the capture, but only as one candidate among the server's own — a preview
+slightly off cannot spoil the result.
 
 > If you change a threshold in `detect.py`, change it in `detect-live.js` too,
-> or the preview will start lying about what the server sees.
+> or the preview will start lying about what the server sees. The two files
+> note the handful of places they deliberately differ, and why.
 
-Three toggles on the scan page, each remembered between visits:
+Two toggles on the scan page, both remembered between visits:
 
 - **Auto-capture** fires the shutter once a card has been held still for about
   0.85s. It disarms after firing and re-arms only when the card leaves the
@@ -113,13 +114,6 @@ Three toggles on the scan page, each remembered between visits:
   Taking the card away also dismisses an already-confirmed result — but never
   pending candidates you haven't acted on. It only captures; confirming stays
   manual, because auto-adding a wrong card is worse than one extra click.
-
-- **Art matching** compares the illustration window on its own as well as the
-  whole card. Every card shares the same frame furniture, so the art is the
-  part that actually distinguishes them — measured, this widened the gap
-  between the right card and the nearest wrong one from 64 to 84. It assumes a
-  standard frame, so full-art and showcase printings can miss; it's consulted
-  *alongside* whole-card matching and only wins when it scores closer.
 
 - **Name check** reads the printed name with OCR and looks the card up by it.
   **On by default, because it is the signal that works.** Measured over 26 real
@@ -140,10 +134,16 @@ Three toggles on the scan page, each remembered between visits:
   correctly between the handful of printings of a card the name identified,
   and it is the fallback when OCR stays silent.
 
-Each result shows a verdict (Strong / Good / Weak / Unreliable) with the raw
-Hamming distance beside it. The distance is the useful number when a scan goes
-wrong: a real photograph of the right card lands near **d50**, while unrelated
-cards sit near **d70**.
+Each result shows a verdict with the raw Hamming distance beside it. A card
+identified by its name reads **Name**; one found by image alone reads Strong /
+Good / Weak / Unreliable.
+
+Don't read too much into the distance. On real webcam captures it is large even
+for the right card — d84 to d104 is typical, against roughly d90 for the best
+of 111k unrelated cards — which is the measurement that moved recognition onto
+the printed name. It is shown because it still separates *printings* of a card
+the name has already identified, and because a genuinely sharp, flat capture
+(a scanner, or a phone straight down on a desk) does land much closer.
 
 ### Scanning from another device
 
@@ -377,7 +377,7 @@ app/
   templating.py         shared Jinja environment, filters and globals
   scryfall/
     sync.py             bulk metadata download → scryfall_card
-    hashing.py          downloads art, computes whole-card and art-window hashes
+    hashing.py          downloads card images and computes their hashes
     prices.py           refreshes Mana Pool prices
     keyrune.py          which set codes have a Keyrune symbol
   recognition/

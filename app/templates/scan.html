@@ -19,12 +19,8 @@
     <input type="checkbox" id="auto-capture" class="toggle toggle-sm toggle-primary">
     <span>Auto-capture</span>
   </label>
-  <label class="auto-toggle" title="Also match on the illustration alone. Separates cards further apart, but assumes a standard card frame.">
-    <input type="checkbox" id="use-art" class="toggle toggle-sm">
-    <span>Art matching</span>
-  </label>
-  <label class="auto-toggle" title="Read the printed name and use it to re-rank the image matches. Adds roughly a third of a second.">
-    <input type="checkbox" id="use-ocr" class="toggle toggle-sm">
+  <label class="auto-toggle" title="Read the printed name and look the card up by it. This is what identifies cards; leaving it off falls back to image matching alone, which rarely works on a real photo. Adds roughly a third of a second.">
+    <input type="checkbox" id="use-ocr" class="toggle toggle-sm toggle-primary">
     <span>Name check</span>
   </label>
 </div>

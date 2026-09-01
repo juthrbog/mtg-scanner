@@ -12,7 +12,6 @@ const overlay = document.getElementById("detect-overlay");
 const statusEl = document.getElementById("detect-status");
 const statusText = document.getElementById("detect-status-text");
 const autoCaptureToggle = document.getElementById("auto-capture");
-const artToggle = document.getElementById("use-art");
 const ocrToggle = document.getElementById("use-ocr");
 
 let currentStream = null;
@@ -96,7 +95,6 @@ async function captureFrame() {
   if (quad && quad.length === 4) {
     form.append("corners", JSON.stringify(quad.map((p) => [p.x * scale, p.y * scale])));
   }
-  if (artToggle && artToggle.checked) form.append("use_art", "true");
   if (ocrToggle && ocrToggle.checked) form.append("use_ocr", "true");
 
   captureBtn.disabled = true;
@@ -158,18 +156,22 @@ if (autoCaptureToggle) {
   });
 }
 
-// Both matching options are remembered between visits, like auto-capture.
-// Name check defaults *on*: measured over 26 real captures the image hash
-// never put the correct card first, while reading the printed name identified
-// 21 of 25, so leaving it off ships the scanner with its working half
-// disabled. Art matching stays off by default — it assumes a standard card
-// frame and so misses exactly the full-art printings that need the most help.
-[["mtg.useArt", artToggle, false], ["mtg.useOcr", ocrToggle, true]].forEach(([key, el, fallback]) => {
+// Name check is remembered between visits, like auto-capture, and defaults
+// *on*: measured over 26 real captures the image hash never put the correct
+// card first, while reading the printed name identified 21 of 25. Leaving it
+// off ships the scanner with the half that works disabled.
+//
+// A stale "0" from before it became the default would do exactly that, so the
+// old key is retired rather than read — anyone who had it off got that setting
+// when art matching still existed and the choice meant something else.
+[["mtg.nameCheck", ocrToggle, true]].forEach(([key, el, fallback]) => {
   if (!el) return;
   const stored = localStorage.getItem(key);
   el.checked = stored === null ? fallback : stored === "1";
   el.addEventListener("change", () => localStorage.setItem(key, el.checked ? "1" : "0"));
 });
+localStorage.removeItem("mtg.useArt");
+localStorage.removeItem("mtg.useOcr");
 
 function resultsOnScreen() {
   return resultEl.children.length > 0;

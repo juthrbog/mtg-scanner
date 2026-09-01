@@ -132,34 +132,13 @@ def _resize_whole(frame: np.ndarray) -> np.ndarray:
     return cv2.resize(frame, (OUTPUT_WIDTH, OUTPUT_HEIGHT))
 
 
-# Fractions of a deskewed card taken up by the art window and by the title
-# bar. Standard card frames only — full-art, showcase and older borders differ,
-# which is why anything using these is a supplement to whole-card matching
-# rather than a replacement for it.
-ART_BOX = (0.10, 0.57, 0.07, 0.93)     # top, bottom, left, right
-TITLE_BOX = (0.035, 0.098, 0.06, 0.80)
-
-
-def _sub_box(card: np.ndarray, box) -> np.ndarray:
-    top, bottom, left, right = box
-    h, w = card.shape[:2]
-    return card[int(h * top):int(h * bottom), int(w * left):int(w * right)]
-
-
-def art_window(card: np.ndarray) -> np.ndarray:
-    """The illustration window of an already-deskewed card.
-
-    Matching on this alone separates cards better than the whole card does —
-    measured, the gap between the right card and the nearest wrong one widened
-    from 64 to 84 — because every card shares the same frame furniture and
-    only the art is unique.
-    """
-    return cv2.resize(_sub_box(card, ART_BOX), (256, 256))
-
-
-def title_strip(card: np.ndarray) -> np.ndarray:
-    """The name bar of an already-deskewed card, for OCR."""
-    return _sub_box(card, TITLE_BOX)
+# Sub-regions of a deskewed card — an art window and a title strip — used to
+# live here. Both are gone. They assumed a standard card frame, which is
+# precisely what full-art and showcase printings do not have, and both were
+# measured to make things worse: art-window matching ranked a card 101270th of
+# 111154, and cropping to the title bar before OCR turned "Myojin of Roaring
+# Blades" into "Myojn or KoJdrgBcue". Whole-card is what both consumers use
+# now.
 
 
 def _quad_aspect(quad: np.ndarray) -> float:

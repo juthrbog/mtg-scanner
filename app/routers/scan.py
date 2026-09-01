@@ -20,8 +20,8 @@ from ..config import (
 )
 from ..db import get_db
 from ..recognition import ocr as ocr_mod
-from ..recognition.detect import art_window, card_candidates
-from ..recognition.match import art_index, hash_frame, index
+from ..recognition.detect import card_candidates
+from ..recognition.match import hash_frame, index
 from .collection import collection_totals
 from ..templating import templates
 
@@ -42,7 +42,6 @@ async def capture(
     request: Request,
     photo: UploadFile = File(...),
     corners: str = Form(None),
-    use_art: bool = Form(False),
     use_ocr: bool = Form(False),
     conn=Depends(get_db),
 ):
@@ -67,17 +66,6 @@ async def capture(
     matches, winner = index.best_matches_multi_with_index(
         [hash_frame(c) for c in crops], top_n=TOP_N_CANDIDATES
     )
-
-    # Matching on the illustration alone separates cards further apart than the
-    # whole card does, but assumes a standard frame — so it is consulted
-    # alongside the whole-card result, never instead of it, and whichever
-    # scores closer wins.
-    if use_art and len(art_index):
-        art_matches, art_winner = art_index.best_matches_multi_with_index(
-            [hash_frame(art_window(c)) for c in crops], top_n=TOP_N_CANDIDATES
-        )
-        if art_matches and (not matches or art_matches[0].distance < matches[0].distance):
-            matches, winner = art_matches, art_winner
 
     # Save the crop that actually won, so the thumbnail shows what the match
     # was computed from rather than detection's first guess.

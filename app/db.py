@@ -105,9 +105,6 @@ _MIGRATIONS = {
         "manapool_nm_cents": "INTEGER",    # near-mint specifically
         "manapool_foil_cents": "INTEGER",
         "manapool_url": "TEXT",
-        # Perceptual hash of the illustration window alone. Optional:
-        # only populated when hashing runs with art hashing enabled.
-        "art_phash": "TEXT",
         # What colours a card actually represents, including mana it
         # produces. A Swamp has no mana cost, so `colors` is empty for it
         # while `color_identity` is black — which is what "how much black
@@ -126,12 +123,35 @@ _MIGRATIONS = {
 }
 
 
+# Columns that used to exist and no longer should. Dropping is safe here
+# because everything listed is *derived* data — recomputable from the card
+# images — never anything the user entered.
+_DROPPED = {
+    # Art-window matching, removed once reading the printed name became the
+    # way cards are identified. It assumed a standard card frame, so it missed
+    # exactly the full-art printings that needed the most help.
+    "scryfall_card": ["art_phash"],
+}
+
+
 def _apply_migrations(conn: sqlite3.Connection) -> None:
     for table, columns in _MIGRATIONS.items():
         existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
         for name, coltype in columns.items():
             if name not in existing:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {coltype}")
+
+    for table, names in _DROPPED.items():
+        existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        for name in names:
+            if name in existing:
+                try:
+                    conn.execute(f"ALTER TABLE {table} DROP COLUMN {name}")
+                except sqlite3.OperationalError:
+                    # DROP COLUMN needs SQLite 3.35+. An unused column is
+                    # harmless, so an older build simply keeps it rather than
+                    # failing to start.
+                    pass
 
 
 def init_db() -> None:

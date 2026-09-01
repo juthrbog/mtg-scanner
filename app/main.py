@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import SCAN_CACHE_DIR
 from .db import init_db
-from .recognition.match import art_index, index
+from .recognition.match import index
 from .routers import collection, decks, scan, stats
 
 app = FastAPI(title="Weatherlight")
@@ -33,12 +33,6 @@ def on_startup() -> None:
         print("    ignored. Re-run:  python -m app.scryfall.hashing")
     if n == 0:
         print("  (empty — run `python -m app.scryfall.sync` then `python -m app.scryfall.hashing`)")
-
-    art_n = art_index.reload(column="art_phash")
-    if art_n:
-        print(f"Loaded {art_n} art-window hashes (optional art matching available).")
-    else:
-        print("No art-window hashes yet — re-run `python -m app.scryfall.hashing --rehash` to enable art matching.")
 
 
 @app.get("/")

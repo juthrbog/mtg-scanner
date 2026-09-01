@@ -129,12 +129,6 @@ class HashIndex:
 # One shared, process-wide index — rebuilt at startup in app/main.py.
 index = HashIndex()
 
-# Optional second index over the illustration window only. Separates cards
-# better than the whole card (every card shares the same frame furniture), but
-# assumes a standard frame — so it supplements the main index rather than
-# replacing it, and stays empty until hashing has populated art_phash.
-art_index = HashIndex()
-
 
 def hash_frame(frame_bgr: np.ndarray) -> imagehash.ImageHash:
     rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)

@@ -21,7 +21,6 @@ import imagehash
 import numpy as np
 from PIL import Image
 
-from ..recognition.detect import art_window
 
 from ..config import DATA_DIR, PHASH_SIZE
 from ..db import db_session
@@ -41,7 +40,7 @@ def _cache_path(scryfall_id: str):
     return d / f"{scryfall_id}.jpg"
 
 
-def _fetch_and_hash(client: httpx.Client, scryfall_id: str, url: str) -> tuple[str, Optional[str], Optional[str]]:
+def _fetch_and_hash(client: httpx.Client, scryfall_id: str, url: str) -> tuple[str, Optional[str]]:
     try:
         path = _cache_path(scryfall_id)
         if path.exists():
@@ -52,15 +51,10 @@ def _fetch_and_hash(client: httpx.Client, scryfall_id: str, url: str) -> tuple[s
             data = resp.content
             path.write_bytes(data)
         img = Image.open(io.BytesIO(data)).convert("RGB")
-        whole = str(imagehash.phash(img, hash_size=PHASH_SIZE))
-        # The art window is hashed from the same source image, so the
-        # index and a live scan crop the same region the same way.
-        bgr = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-        art = Image.fromarray(cv2.cvtColor(art_window(bgr), cv2.COLOR_BGR2RGB))
-        return scryfall_id, whole, str(imagehash.phash(art, hash_size=PHASH_SIZE))
+        return scryfall_id, str(imagehash.phash(img, hash_size=PHASH_SIZE))
     except Exception as exc:  # noqa: BLE001 — one bad image shouldn't stop the run
         print(f"  ! {scryfall_id}: {exc}")
-        return scryfall_id, None, None
+        return scryfall_id, None
 
 
 def build_index(limit: Optional[int] = None, workers: int = 8, rehash: bool = False) -> None:
@@ -97,11 +91,11 @@ def build_index(limit: Optional[int] = None, workers: int = 8, rehash: bool = Fa
                 for row in rows
             }
             for future in as_completed(futures):
-                scryfall_id, phash, art = future.result()
+                scryfall_id, phash = future.result()
                 if phash:
                     conn.execute(
-                        "UPDATE scryfall_card SET phash = ?, art_phash = ? WHERE id = ?",
-                        (phash, art, scryfall_id),
+                        "UPDATE scryfall_card SET phash = ? WHERE id = ?",
+                        (phash, scryfall_id),
                     )
                 done += 1
                 if done % 200 == 0:
