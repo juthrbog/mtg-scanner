@@ -62,7 +62,7 @@ def _color_breakdown(conn: sqlite3.Connection) -> List[dict]:
             if row["mp_cents"]:
                 b["mp"] += row["mp_cents"] * row["quantity"] / 100
 
-    names = {**{k: v for k, v in ((next(iter(s)), n) for s, n in MONO.items())}, "C": "Colourless"}
+    names = {**{k: v for k, v in ((next(iter(s)), n) for s, n in MONO.items())}, "C": "Colorless"}
     peak = max((b["cards"] for b in buckets.values()), default=0)
 
     out = []

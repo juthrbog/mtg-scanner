@@ -82,12 +82,16 @@ def combo_name(colors: str | None) -> str | None:
     """Badge text for a card's colour combination.
 
     Single-colour cards read simply "Mono" — which colour it is, is already
-    obvious from the mana pips shown beside the badge. Colourless cards
-    (artifacts, most lands) get no badge: colourless is not mono-colour.
+    obvious from the mana pips shown beside the badge.
+
+    Colourless cards read "Colorless", Magic's own spelling and its own
+    category: it is not the absence of an answer but a real one, which is why
+    they get a badge rather than the blank space that made a Heart of Kiran
+    look like a card whose colours hadn't loaded.
     """
     letters = parse_colors(colors)
     if not letters:
-        return None
+        return "Colorless"
     if len(letters) == 1:
         return "Mono"
     return ALL_COMBOS.get(letters)
@@ -107,14 +111,16 @@ def combo_kind(colors: str | None) -> str | None:
 def combo_detail(colors: str | None) -> str | None:
     """The secondary label shown next to the badge.
 
-    Only mono cards get one — it completes the phrase ("Mono" + "White").
-    Multicolour cards deliberately get nothing: the family term (guild, shard,
-    wedge, nephilim) is Magic jargon that doesn't explain itself at a glance,
-    so it lives in the badge's tooltip instead of on screen.
+    Nothing gets one any more. Mono cards used to be spelled out in full
+    ("Mono" + "White"), but the mana pips sit directly above the badge and
+    already say which colour it is, so the word only repeated them. Multicolour
+    cards never had one: the family term (guild, shard, wedge, nephilim) is
+    Magic jargon that doesn't explain itself at a glance, so it lives in the
+    badge's tooltip.
+
+    Kept as a filter rather than removed from the templates so the hook is
+    still there if some combination later needs a word beside its badge.
     """
-    letters = parse_colors(colors)
-    if len(letters) == 1:
-        return MONO.get(letters)
     return None
 
 
@@ -126,8 +132,10 @@ def combo_full_name(colors: str | None) -> str | None:
     """
     letters = parse_colors(colors)
     if not letters:
-        return None
+        return "Colorless"
     if len(letters) == 1:
+        # The badge says only "Mono"; the colour it is lives here, so hovering
+        # still spells it out for anyone who wants it.
         return f"Mono {MONO[letters]}"
     name = ALL_COMBOS.get(letters)
     if not name:
