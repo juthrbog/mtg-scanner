@@ -15,8 +15,10 @@ what you actually own, and export them to any of the usual deck sites. No cloud
 service, no account, one SQLite file on your own disk.
 
 **FastAPI + HTMX + Tailwind/DaisyUI + SQLite.** Card data from
-[Scryfall](https://scryfall.com/docs/api), recognition via OpenCV card
-detection and perceptual hashing, set symbols from
+[Scryfall](https://scryfall.com/docs/api); cards are located with OpenCV and
+identified by reading their printed name with
+[RapidOCR](https://github.com/RapidAI/RapidOCR), with perceptual hashing as a
+supporting signal; set symbols from
 [Keyrune](https://keyrune.andrewgioia.com/), mana symbols from
 [Mana](https://mana.andrewgioia.com/).
 
@@ -45,9 +47,13 @@ in the `weatherlight-data` volume, so rebuilding the image never costs you the i
 your collection. (Verified: a `--no-cache` rebuild leaves the index, the hashes
 and the collection intact.)
 
-The image is ~660MB, most of it OpenCV, ONNX Runtime and the OCR models. To
-drop roughly half, remove `rapidocr-onnxruntime` from `requirements.txt` — the
-scan page's **Name check** toggle then simply does nothing.
+The image is ~660MB, most of it OpenCV, ONNX Runtime and the OCR models.
+Dropping `rapidocr-onnxruntime` from `requirements.txt` roughly halves that,
+but **don't**: reading the printed name is how cards are identified now, and
+without it scanning falls back to image matching alone, which on a real webcam
+photo almost never finds the right card. See [Scanning](#scanning) for the
+measurements. Remove it only if you want the collection, deck and price
+features and intend to add cards by search rather than by camera.
 
 **Camera access needs a secure context.** `http://localhost:8000` counts as
 one, so scanning works out of the box on the machine running Docker. Reaching
@@ -74,8 +80,11 @@ don't need the second to start browsing:
 python -m app.scryfall.sync --bulk-type default_cards
 
 # 2. The image match index. One small image per card; about 3 minutes at 16
-#    workers. Safe to interrupt and re-run — it resumes, and art is cached
-#    under data/art_cache/ so later re-hashes cost CPU, not another download.
+#    workers. Safe to interrupt and re-run — it resumes, and each image is
+#    cached under data/art_cache/ so later re-hashes cost CPU, not another
+#    download. Required for scanning even though the hash is no longer what
+#    identifies a card: the name lookup searches the cards this step has
+#    hashed, so an unhashed card cannot be scanned in.
 python -m app.scryfall.hashing --workers 16
 
 # 3. Market prices (optional).
@@ -162,14 +171,18 @@ keywords**; a prefix narrows it to one field.
 | Query | Finds |
 |---|---|
 | `dragon` | name, type, set or keyword containing "dragon" |
-| `t:creature` | type line — `t:legendary`, `t:artifact` |
-| `s:mbs` | set name or code |
-| `kw:flying` | abilities, from Scryfall's structured keyword list |
-| `o:destroy` | rules text |
+| `n:bolt` | name only (`name:` also works) |
+| `t:creature` | type line — `t:legendary`, `t:artifact` (`type:`) |
+| `s:mbs` | set name or code (`set:`, and Scryfall's `e:`) |
+| `kw:flying` | abilities, from Scryfall's structured keyword list (`keyword:`) |
+| `o:destroy` | rules text (`oracle:`) |
+| `r:mythic` | rarity (`rarity:`) |
 | `"exact phrase"` | the phrase, kept together |
 | `t:creature -kw:flying` | creatures that don't fly |
 
-Terms combine with AND, so each one narrows the result.
+Terms combine with AND, so each one narrows the result. A prefix that isn't in
+that list is searched as literal text rather than rejected, so a stray colon
+never turns into an error.
 
 Two deliberate choices:
 
@@ -359,13 +372,18 @@ your collection untouched — schema changes are applied as in-place
 `ALTER TABLE` migrations rather than rebuilds. To back it up, copy that one
 file.
 
+A retired feature can take its column with it (`_DROPPED` in `db.py`), but only
+ever a *derived* one — something recomputable from the card images, never
+anything you entered. Collection rows, decks and scan history are only ever
+added to.
+
 ---
 
 ## How it's organized
 
 ```
 app/
-  main.py               FastAPI app; startup loads the hash indexes into memory
+  main.py               FastAPI app; startup loads the hash index into memory
   config.py             paths, fingerprint size, match thresholds — one place to edit
   db.py                 SQLite schema, connection helpers, in-place migrations
   search.py             parses the Scryfall-style query into a SQL fragment
@@ -381,9 +399,9 @@ app/
     prices.py           refreshes Mana Pool prices
     keyrune.py          which set codes have a Keyrune symbol
   recognition/
-    detect.py           OpenCV: find the card in a frame, warp it flat
+    detect.py           OpenCV: shape search + contours + lines; warps the card flat
     match.py            packed-bit Hamming search over the in-memory index
-    ocr.py              reads the printed name; re-ranks image matches
+    ocr.py              reads the printed name and finds the card from it
   routers/
     collection.py       browse / search / sort / edit / delete
     scan.py             capture → match → confirm
@@ -392,11 +410,12 @@ app/
   templates/            Jinja2 + HTMX partials
   static/
     scan.js             camera capture, auto-capture, toggles
-    detect-live.js      the server's detection, running live in the browser
+    detect-live.js      the same three searches, running live in the browser
     preview.js          hover-to-enlarge card art
     app.css             hand-written CSS for layout and anything HTMX injects
     src.css             Tailwind input, compiled to tailwind.css
-data/                   gitignored — mtg.db, art cache, bulk files, scan captures
+data/                   gitignored — mtg.db, image cache, bulk files, scan captures
+                        (each scan keeps both the crop and the frame it came from)
 ```
 
 Third-party assets (`opencv.js`, DaisyUI, Keyrune, Mana, htmx) and the
@@ -412,18 +431,40 @@ Tailwind binary are gitignored and re-fetched with `./fetch-assets.sh`.
   `sync.py --skip-download` re-parses the file already on disk, which is how
   new columns get populated without another few hundred MB.
 
-- **Fingerprint size matters more than camera resolution.** Capture resolution
-  barely changes the hit rate above about 1280px, because pHash downsamples
-  internally — extra pixels buy margin, not new matches. Fingerprint length
-  does change it: at 64 bits a glare patch made the *wrong* card closer than
-  the right one; at 256 bits the margin turns positive and matches come back.
-  `PHASH_SIZE` in `config.py` controls this. Changing it invalidates every
-  stored hash, and the app says so at startup.
+- **`PHASH_SIZE` is not a lever worth pulling.** All 111k references were
+  rehashed at 64, 100, 144 and 256 bits and re-ranked against a hand-cropped,
+  pixel-accurate capture: the correct card placed 740th at 64 bits and 5367th
+  at 256. No setting makes the hash identify a webcam photo. It stays at 256
+  because that is what the stored hashes were built with; changing it
+  invalidates every one of them, and the app says so at startup.
 
-- **Detection runs over two channels**, brightness and saturation. Glare is
-  nearly colourless, so a reflection that erases the card's edges in
-  brightness leaves them visible in saturation. Candidates from both are
-  scored and the best wins.
+- **Capture resolution matters for reading, not for hashing.**
+  `MAX_UPLOAD_EDGE` in `scan.js` is 1600; the measurement behind that number
+  was about hash distance, and the binding constraint now is whether OCR can
+  resolve the printed name. Re-running the same 25 captures downscaled: 21
+  identified at 1280px, 20 at 960 and at 640, then 16 at 480. So there is
+  headroom to shrink the upload, but the floor is the point where the title
+  stops being legible, not anything to do with the hash.
+
+- **Detection runs three searches over four channels.** The channels are
+  brightness, saturation, and Lab a and b. Glare is nearly colourless, so a
+  reflection that erases a card's edges in brightness leaves them in
+  saturation; skin against green or blue card art is a clean step in a/b when
+  the other two run continuous across the boundary. The searches are:
+
+  1. **Shape search** (`card_pose`) scans a 63:88 rectangle over position,
+     size and rotation and scores how well its outline sits on image edges,
+     scoring horizontal edges with `|d/dy|` and vertical ones with `|d/dx|` so
+     rules text parallel to the card's top edge cannot support it. This is the
+     steady one: across near-identical frames it moves its answer ~10px, where
+     the edge-following searches moved 53px and sometimes found nothing.
+  2. **Contour following**, for a card whose outline is closed — the more
+     precise answer when it works.
+  3. **Line fitting**, for an outline that is straight but broken, which is
+     what a borderless card against skin gives.
+
+  All three feed the matcher, which scores every crop. Either family alone
+  reads 17–18 of 25 real captures; together they read 20.
 
 - **Rig beats algorithm.** A straight-down camera angle and even, diffuse
   lighting will outperform a better camera held at an angle. Dark or busy
